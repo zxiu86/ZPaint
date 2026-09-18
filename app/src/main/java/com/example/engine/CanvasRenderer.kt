@@ -48,7 +48,17 @@ object CanvasRenderer {
                 }
 
                 layerPaint.alpha = (layer.opacity * 255).toInt().coerceIn(0, 255)
+                val blendModeXfer = when (layer.blendMode) {
+                    "مضاعفة" -> PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
+                    "شاشة" -> PorterDuffXfermode(PorterDuff.Mode.SCREEN)
+                    "إضافة" -> PorterDuffXfermode(PorterDuff.Mode.ADD)
+                    "تراكب" -> PorterDuffXfermode(PorterDuff.Mode.OVERLAY)
+                    "إضاءة" -> PorterDuffXfermode(PorterDuff.Mode.LIGHTEN)
+                    else -> null
+                }
+                layerPaint.xfermode = blendModeXfer
                 canvas.drawBitmap(layerBitmap, 0f, 0f, layerPaint)
+                layerPaint.xfermode = null
                 layerBitmap.recycle()
             }
         }

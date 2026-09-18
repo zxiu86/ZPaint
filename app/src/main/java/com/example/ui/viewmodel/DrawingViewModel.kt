@@ -11,12 +11,16 @@ import com.example.data.repository.ProjectRepository
 import com.example.data.sync.CloudSyncManager
 import com.example.data.sync.CloudSyncState
 import com.example.engine.CanvasRenderer
+import androidx.compose.ui.graphics.toArgb
+import com.example.model.ActiveSlidingSheet
 import com.example.model.AnimationFrame
 import com.example.model.BrushConfig
 import com.example.model.BrushType
+import com.example.model.CanvasPaper
 import com.example.model.DrawingLayer
 import com.example.model.DrawingStroke
 import com.example.model.Project
+import com.example.model.SymmetryMode
 import com.example.model.TouchPoint
 import com.example.util.ExportFormat
 import com.example.util.ExportUtil
@@ -91,6 +95,44 @@ class DrawingViewModel(application: Application) : AndroidViewModel(application)
     private val _lastExportedFile = MutableStateFlow<File?>(null)
     val lastExportedFile: StateFlow<File?> = _lastExportedFile.asStateFlow()
 
+    // Studio Guides & Canvas States
+    private val _canvasPaper = MutableStateFlow(CanvasPaper.WHITE)
+    val canvasPaper: StateFlow<CanvasPaper> = _canvasPaper.asStateFlow()
+
+    private val _showGrid = MutableStateFlow(false)
+    val showGrid: StateFlow<Boolean> = _showGrid.asStateFlow()
+
+    private val _gridSize = MutableStateFlow(40f)
+    val gridSize: StateFlow<Float> = _gridSize.asStateFlow()
+
+    private val _symmetryMode = MutableStateFlow(SymmetryMode.NONE)
+    val symmetryMode: StateFlow<SymmetryMode> = _symmetryMode.asStateFlow()
+
+    private val _flipHorizontal = MutableStateFlow(false)
+    val flipHorizontal: StateFlow<Boolean> = _flipHorizontal.asStateFlow()
+
+    private val _flipVertical = MutableStateFlow(false)
+    val flipVertical: StateFlow<Boolean> = _flipVertical.asStateFlow()
+
+    private val _recentColors = MutableStateFlow(
+        listOf(
+            Color(0xFF101014),
+            Color.White,
+            Color(0xFFE53935),
+            Color(0xFF1E88E5),
+            Color(0xFF43A047),
+            Color(0xFFFDD835),
+            Color(0xFF8E24AA),
+            Color(0xFFFF9800),
+            Color(0xFF00BCD4),
+            Color(0xFF795548)
+        )
+    )
+    val recentColors: StateFlow<List<Color>> = _recentColors.asStateFlow()
+
+    private val _activeSlidingSheet = MutableStateFlow(ActiveSlidingSheet.NONE)
+    val activeSlidingSheet: StateFlow<ActiveSlidingSheet> = _activeSlidingSheet.asStateFlow()
+
     private var playbackJob: Job? = null
     private var autoSaveJob: Job? = null
 
@@ -153,9 +195,34 @@ class DrawingViewModel(application: Application) : AndroidViewModel(application)
         val frameIdx = _currentFrameIndex.value.coerceIn(0, currentProj.frames.size - 1)
         val frame = currentProj.frames[frameIdx]
 
+        val strokesToAdd = mutableListOf(completedStroke)
+        val symMode = _symmetryMode.value
+        val cw = currentProj.width.toFloat()
+        val ch = currentProj.height.toFloat()
+
+        when (symMode) {
+            SymmetryMode.VERTICAL -> {
+                val mirroredPts = completedStroke.points.map { pt -> pt.copy(x = cw - pt.x) }
+                strokesToAdd.add(completedStroke.copy(id = UUID.randomUUID().toString(), points = mirroredPts))
+            }
+            SymmetryMode.HORIZONTAL -> {
+                val mirroredPts = completedStroke.points.map { pt -> pt.copy(y = ch - pt.y) }
+                strokesToAdd.add(completedStroke.copy(id = UUID.randomUUID().toString(), points = mirroredPts))
+            }
+            SymmetryMode.QUAD -> {
+                val vPts = completedStroke.points.map { pt -> pt.copy(x = cw - pt.x) }
+                val hPts = completedStroke.points.map { pt -> pt.copy(y = ch - pt.y) }
+                val qPts = completedStroke.points.map { pt -> pt.copy(x = cw - pt.x, y = ch - pt.y) }
+                strokesToAdd.add(completedStroke.copy(id = UUID.randomUUID().toString(), points = vPts))
+                strokesToAdd.add(completedStroke.copy(id = UUID.randomUUID().toString(), points = hPts))
+                strokesToAdd.add(completedStroke.copy(id = UUID.randomUUID().toString(), points = qPts))
+            }
+            SymmetryMode.NONE -> {}
+        }
+
         val updatedLayers = frame.layers.map { layer ->
             if (layer.id == _activeLayerId.value) {
-                layer.copy(strokes = layer.strokes + completedStroke)
+                layer.copy(strokes = layer.strokes + strokesToAdd)
             } else {
                 layer
             }
@@ -230,6 +297,54 @@ class DrawingViewModel(application: Application) : AndroidViewModel(application)
 
     fun setBrushColor(color: Color) {
         _brushConfig.value = _brushConfig.value.copy(color = color)
+        addRecentColor(color)
+    }
+
+    fun addRecentColor(color: Color) {
+        val filtered = _recentColors.value.filter { it != color }.toMutableList()
+        filtered.add(0, color)
+        _recentColors.value = filtered.take(12)
+    }
+
+    fun setActiveSlidingSheet(sheet: ActiveSlidingSheet) {
+        _activeSlidingSheet.value = sheet
+    }
+
+    fun dismissSlidingSheet() {
+        _activeSlidingSheet.value = ActiveSlidingSheet.NONE
+    }
+
+    fun setCanvasPaper(paper: CanvasPaper) {
+        _canvasPaper.value = paper
+    }
+
+    fun toggleGrid() {
+        _showGrid.value = !_showGrid.value
+    }
+
+    fun setGridSize(size: Float) {
+        _gridSize.value = size.coerceIn(15f, 120f)
+    }
+
+    fun setSymmetryMode(mode: SymmetryMode) {
+        _symmetryMode.value = mode
+    }
+
+    fun toggleFlipHorizontal() {
+        _flipHorizontal.value = !_flipHorizontal.value
+    }
+
+    fun toggleFlipVertical() {
+        _flipVertical.value = !_flipVertical.value
+    }
+
+    fun setLayerBlendMode(layerId: String, mode: String) {
+        val currentLayers = getCurrentFrameLayers()
+        val updatedLayers = currentLayers.map {
+            if (it.id == layerId) it.copy(blendMode = mode) else it
+        }
+        applyLayersToCurrentFrame(updatedLayers)
+        scheduleAutoSave()
     }
 
     fun setBrushSmoothing(smoothing: Float) {
