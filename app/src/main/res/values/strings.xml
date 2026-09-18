@@ -1,0 +1,57 @@
+<resources>
+    <string name="app_name">ZPaint</string>
+    <string name="draw_canvas">لوحة الرسم</string>
+    <string name="new_project">مشروع جديد</string>
+    <string name="projects_gallery">معرض المشاريع</string>
+    <string name="brush_pencil">قلم رصاص</string>
+    <string name="brush_pen">قلم تحبير دقيق</string>
+    <string name="brush_calligraphy">قلم خط عربي</string>
+    <string name="brush_airbrush">بخاخ هوائي</string>
+    <string name="brush_marker">قلم تحديد ماركر</string>
+    <string name="brush_watercolor">ألوان مائية</string>
+    <string name="brush_charcoal">فحم ناعم</string>
+    <string name="brush_oil">ألوان زيتية</string>
+    <string name="brush_neon">نيون مضيء</string>
+    <string name="brush_eraser">ممحاة</string>
+    <string name="brush_smudge">أداة المزج والدمج</string>
+    <string name="brush_sparkles">فرشاة البريق</string>
+    <string name="brush_stars">فرشاة النجوم</string>
+    <string name="brush_stipple">فرشاة التنقيط</string>
+
+    <string name="layers_title">الطبقات</string>
+    <string name="add_layer">إضافة طبقة</string>
+    <string name="delete_layer">حذف الطبقة</string>
+    <string name="layer_opacity">الشفافية</string>
+    <string name="merge_down">دمج للأسفل</string>
+    <string name="clear_layer">مسح الطبقة</string>
+
+    <string name="animation_timeline">شريط الحركة (أنيميشن)</string>
+    <string name="play">تشغيل</string>
+    <string name="pause">إيقاف</string>
+    <string name="fps">إطار بالثانية</string>
+    <string name="onion_skin">شفافية الإطار السابق (Onion Skin)</string>
+    <string name="add_frame">إطار جديد</string>
+    <string name="duplicate_frame">نسخ الإطار</string>
+    <string name="delete_frame">حذف الإطار</string>
+
+    <string name="export_title">تصدير ومشاركة</string>
+    <string name="export_png">تصدير PNG (مع الشفافية)</string>
+    <string name="export_jpg">تصدير JPG عالي الدقة</string>
+    <string name="export_webp">تصدير WebP فائق الضغط</string>
+    <string name="export_mp4">تصدير فيديو MP4</string>
+    <string name="share_file">مشاركة فورية</string>
+
+    <string name="cloud_sync">المزامنة السحابية التلقائية</string>
+    <string name="cloud_status_synced">محفوظ ومزامن سحابياً</string>
+    <string name="cloud_status_syncing">جارٍ المزامنة...</string>
+    <string name="cloud_status_offline">محفوظ محلياً (غير متصل)</string>
+    <string name="undo">تراجع</string>
+    <string name="redo">إعادة</string>
+    <string name="color_picker">منتقي الألوان</string>
+    <string name="eyedropper">قطّارة الألوان</string>
+    <string name="clear_canvas">مسح اللوحة</string>
+    <string name="brush_size">حجم الفرشاة</string>
+    <string name="brush_opacity">كثافة الفرشاة</string>
+    <string name="brush_smoothing">تثبيت ونعومة الحركة</string>
+    <string name="zero_latency">وضع الاستجابة الفائقة (صفر تأخير)</string>
+</resources>

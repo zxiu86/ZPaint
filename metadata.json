@@ -1,0 +1,6 @@
+{
+  "name": "ZPaint",
+  "description": "تطبيق رسم رقمي احترافي ورسوم متحركة بأداء فائق وطبقات متعددة وفرش متنوعة وتصدير MP4 ومزامنة سحابية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
