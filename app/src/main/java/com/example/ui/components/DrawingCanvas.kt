@@ -108,7 +108,6 @@ fun DrawingCanvas(
                     var isDrawing = false
                     var isTransforming = false
                     var maxPointersSeen = 1
-                    var lastAddedPos = Offset(-999f, -999f)
 
                     val startCanvasPos = toCanvasCoordinates(
                         firstDown.position,
@@ -121,6 +120,14 @@ fun DrawingCanvas(
                         flipHorizontal,
                         flipVertical
                     )
+
+                    // Immediate 0ms stroke initiation on down
+                    touchStabilizer.reset()
+                    val p0 = if (firstDown.pressure > 0f) firstDown.pressure else 1.0f
+                    val smoothedDown = touchStabilizer.onDown(TouchPoint(startCanvasPos.x, startCanvasPos.y, p0), firstDown.uptimeMillis)
+                    onStartStroke(smoothedDown)
+                    isDrawing = true
+                    firstDown.consume()
 
                     do {
                         val event = awaitPointerEvent()
@@ -135,6 +142,10 @@ fun DrawingCanvas(
                                 isDrawing = false
                                 touchStabilizer.reset()
                                 onEndStroke()
+                                // If multi-touch was detected within 220ms, clean up the accidental tap stroke
+                                if (System.currentTimeMillis() - downTime < 220) {
+                                    onTwoFingerTapUndo()
+                                }
                             }
                             isTransforming = true
                             val zoomChange = event.calculateZoom()
@@ -145,6 +156,8 @@ fun DrawingCanvas(
                             event.changes.forEach { it.consume() }
                         } else if (pressedPointers.size == 1 && !isTransforming) {
                             val change = pressedPointers.first()
+                            val pressure = if (change.pressure > 0f) change.pressure else 1.0f
+
                             val canvasPos = toCanvasCoordinates(
                                 change.position,
                                 size.width.toFloat(),
@@ -157,21 +170,14 @@ fun DrawingCanvas(
                                 flipVertical
                             )
 
-                            if (!isDrawing) {
-                                isDrawing = true
-                                lastAddedPos = canvasPos
-                                touchStabilizer.reset()
-                                val smoothed = touchStabilizer.onDown(TouchPoint(canvasPos.x, canvasPos.y, 1.0f))
-                                onStartStroke(smoothed)
-                                change.consume()
-                            } else if (change.positionChange() != Offset.Zero) {
-                                val smoothed = touchStabilizer.onMove(TouchPoint(canvasPos.x, canvasPos.y, 1.0f))
-                                if (smoothed != null) {
-                                    lastAddedPos = Offset(smoothed.x, smoothed.y)
-                                    onAppendPoint(smoothed)
-                                    change.consume()
-                                }
+                            val smoothed = touchStabilizer.onMove(
+                                TouchPoint(canvasPos.x, canvasPos.y, pressure),
+                                change.uptimeMillis
+                            )
+                            if (smoothed != null) {
+                                onAppendPoint(smoothed)
                             }
+                            change.consume()
                         }
                     } while (event.changes.any { it.pressed })
 

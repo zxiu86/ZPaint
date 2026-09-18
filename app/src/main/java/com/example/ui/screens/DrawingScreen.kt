@@ -64,6 +64,7 @@ import com.example.ui.components.DrawingCanvas
 import com.example.ui.components.ProjectsGalleryDialog
 import com.example.ui.components.QuickSlidersRail
 import com.example.ui.components.SlidingStudioDrawer
+import com.example.ui.components.StudioHeader
 import com.example.ui.components.ToolPalette
 import com.example.ui.theme.AccentGreen
 import com.example.ui.theme.DarkBg
@@ -154,223 +155,34 @@ fun DrawingScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // 2. Dynamic, Responsive Top Header Bar
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 900.dp)
-                        .align(Alignment.TopCenter)
-                        .padding(horizontal = if (isWideScreen) 24.dp else 10.dp, vertical = 8.dp)
-                        .border(1.dp, GrayBorderComfortable, RoundedCornerShape(22.dp))
-                        .testTag("top_header_bar"),
-                    color = DarkSurface.copy(alpha = 0.94f),
-                    shape = RoundedCornerShape(22.dp),
-                    shadowElevation = 8.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = if (isWideScreen) 14.dp else 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Left: Return to Home & Projects Gallery Title
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = onNavigateToHome,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(DarkSurfaceElevated, CircleShape)
-                                    .testTag("nav_home_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "العودة للرئيسية",
-                                    tint = WhitePure,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(6.dp))
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { showProjectsGallery = true }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                                    .testTag("open_gallery_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Folder,
-                                    contentDescription = "Projects Gallery",
-                                    tint = WhiteComfortable,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        text = currentProject.title,
-                                        color = WhitePure,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1
-                                    )
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = when (syncState) {
-                                                CloudSyncState.SYNCED -> Icons.Default.CloudDone
-                                                CloudSyncState.SYNCING -> Icons.Default.CloudSync
-                                                else -> Icons.Default.Sync
-                                            },
-                                            contentDescription = "Sync",
-                                            tint = if (syncState == CloudSyncState.SYNCED) AccentGreen else WhiteMuted,
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Text(
-                                            text = if (syncState == CloudSyncState.SYNCED) "سحابي ✓" else "محلي",
-                                            color = if (syncState == CloudSyncState.SYNCED) AccentGreen else WhiteMuted,
-                                            fontSize = 10.sp
-                                        )
-                                        if (isWideScreen) {
-                                            Text(
-                                                text = " • ${currentProject.width}×${currentProject.height}",
-                                                color = WhiteMuted,
-                                                fontSize = 10.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Center: Undo and Redo & Sliders Toggle
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .background(DarkSurfaceElevated, RoundedCornerShape(16.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            IconButton(
-                                onClick = { viewModel.undo() },
-                                enabled = canUndo,
-                                modifier = Modifier.size(34.dp).testTag("undo_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                                    contentDescription = "Undo",
-                                    tint = if (canUndo) WhitePure else WhiteMuted.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { viewModel.redo() },
-                                enabled = canRedo,
-                                modifier = Modifier.size(34.dp).testTag("redo_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Redo,
-                                    contentDescription = "Redo",
-                                    tint = if (canRedo) WhitePure else WhiteMuted.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { showQuickSliders = !showQuickSliders },
-                                modifier = Modifier.size(34.dp).testTag("quick_sliders_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = "Quick Sliders",
-                                    tint = if (showQuickSliders) AccentGreen else WhiteComfortable,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
-                        }
-
-                        // Right: Animation Timeline, Tools & Guides Sliding Drawer, Layers, Export
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(if (isWideScreen) 6.dp else 4.dp)
-                        ) {
-                            // Animation Mode Toggle
-                            IconButton(
-                                onClick = { showAnimationTimeline = !showAnimationTimeline },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(
-                                        if (showAnimationTimeline) DarkSurfaceHighlight else Color.Transparent,
-                                        CircleShape
-                                    )
-                                    .testTag("animation_toggle_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Movie,
-                                    contentDescription = "Animation Timeline",
-                                    tint = if (showAnimationTimeline) WhitePure else WhiteComfortable,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            // Sliding Tools & Guides Sheet
-                            IconButton(
-                                onClick = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.TOOLS) },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(
-                                        if (activeSlidingSheet == ActiveSlidingSheet.TOOLS) DarkSurfaceHighlight else Color.Transparent,
-                                        CircleShape
-                                    )
-                                    .testTag("header_tools_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.GridOn,
-                                    contentDescription = "Tools and Guides",
-                                    tint = if (showGrid || symmetryMode != com.example.model.SymmetryMode.NONE) AccentGreen else WhitePure,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            // Sliding Layers Sheet
-                            IconButton(
-                                onClick = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.LAYERS) },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(
-                                        if (activeSlidingSheet == ActiveSlidingSheet.LAYERS) DarkSurfaceHighlight else Color.Transparent,
-                                        CircleShape
-                                    )
-                                    .testTag("layers_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Layers,
-                                    contentDescription = "Layers",
-                                    tint = WhitePure,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            // Sliding Export & Share Sheet
-                            IconButton(
-                                onClick = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.EXPORT) },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(WhitePure, CircleShape)
-                                    .testTag("export_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Export & Share",
-                                    tint = Color(0xFF101014),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                // 2. Dynamic, Responsive Top Header Bar (StudioHeader)
+                StudioHeader(
+                    projectTitle = currentProject.title,
+                    canvasWidth = currentProject.width,
+                    canvasHeight = currentProject.height,
+                    syncState = syncState,
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    showQuickSliders = showQuickSliders,
+                    showAnimationTimeline = showAnimationTimeline,
+                    activeSlidingSheet = activeSlidingSheet,
+                    showGrid = showGrid,
+                    symmetryMode = symmetryMode,
+                    layerCount = currentLayers.size,
+                    frameCount = currentProject.frames.size,
+                    currentFrameIndex = currentFrameIndex,
+                    isWideScreen = isWideScreen,
+                    onNavigateBack = onNavigateToHome,
+                    onOpenGallery = { showProjectsGallery = true },
+                    onUndo = { viewModel.undo() },
+                    onRedo = { viewModel.redo() },
+                    onToggleQuickSliders = { showQuickSliders = !showQuickSliders },
+                    onToggleAnimationTimeline = { showAnimationTimeline = !showAnimationTimeline },
+                    onOpenToolsSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.TOOLS) },
+                    onOpenLayersSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.LAYERS) },
+                    onOpenExportSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.EXPORT) },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
 
                 // 3. Quick Sliders Rail (Floating for quick thumb adjustments)
                 AnimatedVisibility(

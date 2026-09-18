@@ -1,16 +1,24 @@
-name: Build Android APK
+name: Build & Release Android APK
 
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub Release'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -28,8 +36,9 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Generate or restore debug keystore
+      - name: Restore persistent keystores (debug & release)
         run: |
+          # Restore debug keystore
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
           elif [ ! -f debug.keystore ]; then
@@ -44,12 +53,44 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+          # Restore permanent release keystore
+          if [ -f release.keystore.base64 ]; then
+            base64 -d release.keystore.base64 > release.keystore
+          fi
 
-      - name: Upload APK
+      - name: Build Android APKs (Release & Debug)
+        run: ./gradlew assembleRelease assembleDebug --no-daemon
+
+      - name: Rename Release APK for Release
+        run: |
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/release/*.apk release-artifacts/ZPaint-v1.0.1-release.apk || true
+          cp app/build/outputs/apk/debug/*.apk release-artifacts/ZPaint-v1.0.1-debug.apk || true
+
+      - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ZPaint-apk
+          name: ZPaint-v1.0.1-Release-APK
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZPaint-v1.0.1-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ZPaint Release ${{ github.ref_name || 'v1.0.1' }}
+          tag_name: ${{ github.ref_name || 'v1.0.1' }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release-artifacts/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

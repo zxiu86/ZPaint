@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -17,19 +18,35 @@ android {
     applicationId = "com.zpaint.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "1.0.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      val releaseKeystore = file("${rootDir}/release.keystore")
+      val base64Keystore = file("${rootDir}/release.keystore.base64")
+      if (!releaseKeystore.exists() && base64Keystore.exists()) {
+        try {
+          val decoded = Base64.getMimeDecoder().decode(base64Keystore.readText().trim())
+          releaseKeystore.writeBytes(decoded)
+        } catch (_: Exception) {}
+      }
+
+      if (releaseKeystore.exists()) {
+        storeFile = releaseKeystore
+        storePassword = System.getenv("STORE_PASSWORD") ?: "zpaint123456"
+        keyAlias = System.getenv("KEY_ALIAS") ?: "zpaint"
+        keyPassword = System.getenv("KEY_PASSWORD") ?: "zpaint123456"
+      } else {
+        val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/debug.keystore"
+        storeFile = file(keystorePath)
+        storePassword = System.getenv("STORE_PASSWORD") ?: "android"
+        keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
+        keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+      }
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
