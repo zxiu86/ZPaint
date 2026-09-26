@@ -120,6 +120,7 @@ import java.io.File
 fun SlidingStudioDrawer(
     activeSheet: ActiveSlidingSheet,
     viewModel: DrawingViewModel,
+    onOpenManhwaStudio: () -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -191,7 +192,7 @@ fun SlidingStudioDrawer(
                         when (activeSheet) {
                             ActiveSlidingSheet.BRUSHES -> SlidingBrushesContent(viewModel)
                             ActiveSlidingSheet.LAYERS -> SlidingLayersContent(viewModel)
-                            ActiveSlidingSheet.TOOLS -> SlidingToolsAndGuidesContent(viewModel)
+                            ActiveSlidingSheet.TOOLS -> SlidingToolsAndGuidesContent(viewModel, onOpenManhwaStudio)
                             ActiveSlidingSheet.COLOR -> SlidingColorPaletteContent(viewModel)
                             ActiveSlidingSheet.EXPORT -> SlidingExportContent(viewModel, onDismiss)
                             ActiveSlidingSheet.NONE -> {}
@@ -764,10 +765,13 @@ fun SlidingLayersContent(viewModel: DrawingViewModel) {
 }
 
 // -------------------------------------------------------------
-// 3. Sliding Tools & Guides Content (Symmetry, Grid, Paper, Flip)
+// 3. Sliding Tools & Guides Content (Symmetry, Grid, Paper, Flip, Manhwa Studio)
 // -------------------------------------------------------------
 @Composable
-fun SlidingToolsAndGuidesContent(viewModel: DrawingViewModel) {
+fun SlidingToolsAndGuidesContent(
+    viewModel: DrawingViewModel,
+    onOpenManhwaStudio: () -> Unit = {}
+) {
     val showGrid = viewModel.showGrid.value
     val gridSize = viewModel.gridSize.value
     val symmetryMode = viewModel.symmetryMode.value
@@ -779,6 +783,48 @@ fun SlidingToolsAndGuidesContent(viewModel: DrawingViewModel) {
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Section 0: Manhwa & Giant Image Studio Launcher Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AccentGreen.copy(alpha = 0.5f), RoundedCornerShape(18.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "أستوديو المانهوا والصور العملاقة ✂️", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = AccentGreen.copy(alpha = 0.2f)
+                        ) {
+                            Text(text = "v1.3.0", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
+                    Text(
+                        text = "قص حر للصور حتى 800×10000+ بكسل بدون فقد + تجميع ذكي للصور بالاسم",
+                        color = WhiteMuted,
+                        fontSize = 11.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = onOpenManhwaStudio,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen, contentColor = Color.Black),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "فتح أستوديو قص ودمج المانهوا", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
         // Section 1: Intelligent Symmetry Guides
         item {
             Card(

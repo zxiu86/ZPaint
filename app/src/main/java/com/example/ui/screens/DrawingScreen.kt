@@ -82,6 +82,7 @@ import com.example.ui.viewmodel.DrawingViewModel
 fun DrawingScreen(
     viewModel: DrawingViewModel,
     onNavigateToHome: () -> Unit = {},
+    onOpenManhwaStudio: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentProject by viewModel.currentProject.collectAsStateWithLifecycle()
@@ -259,6 +260,7 @@ fun DrawingScreen(
                 SlidingStudioDrawer(
                     activeSheet = activeSlidingSheet,
                     viewModel = viewModel,
+                    onOpenManhwaStudio = onOpenManhwaStudio,
                     onDismiss = { viewModel.dismissSlidingSheet() }
                 )
 

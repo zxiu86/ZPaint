@@ -98,11 +98,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.ViewAgenda
+import com.example.ui.viewmodel.ManhwaStudioTab
+
 @Composable
 fun HomeScreen(
     viewModel: DrawingViewModel,
     onOpenProject: (String) -> Unit,
     onOpenNewCanvas: (title: String, width: Int, height: Int) -> Unit,
+    onOpenManhwaStudio: (ManhwaStudioTab) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val allProjects by viewModel.allProjects.collectAsStateWithLifecycle()
@@ -156,7 +161,15 @@ fun HomeScreen(
                 )
             }
 
-            // 2. Quick Canvas Size Presets (Full width)
+            // 2. Dedicated Manhwa & Giant Image Studio Hub (Full width)
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                ManhwaStudioHubCard(
+                    onOpenSlicer = { onOpenManhwaStudio(ManhwaStudioTab.SLICER) },
+                    onOpenStitcher = { onOpenManhwaStudio(ManhwaStudioTab.STITCHER) }
+                )
+            }
+
+            // 3. Quick Canvas Size Presets (Full width)
             item(span = { GridItemSpan(maxLineSpan) }) {
                 QuickPresetsRow(
                     onSelectPreset = { title, w, h ->
@@ -166,12 +179,12 @@ fun HomeScreen(
                 )
             }
 
-            // 3. Engine & Brushes Quality Badges (Full width)
+            // 4. Engine & Brushes Quality Badges (Full width)
             item(span = { GridItemSpan(maxLineSpan) }) {
                 EngineQualityHighlights()
             }
 
-            // 4. Section Title: Recent Projects
+            // 5. Section Title: Recent Projects
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Row(
                     modifier = Modifier
@@ -204,7 +217,7 @@ fun HomeScreen(
                 }
             }
 
-            // 5. Empty State or Projects Grid Cards
+            // 6. Empty State or Projects Grid Cards
             if (allProjects.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyProjectsCard(onCreateClick = { showCreateDialog = true })
@@ -348,6 +361,178 @@ private fun HomeStudioHeader(
 }
 
 @Composable
+private fun ManhwaStudioHubCard(
+    onOpenSlicer: () -> Unit,
+    onOpenStitcher: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, GrayBorderComfortable, RoundedCornerShape(22.dp)),
+        color = DarkSurfaceElevated,
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(AccentGreen.copy(alpha = 0.2f), CircleShape)
+                            .border(1.dp, AccentGreen, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ViewAgenda,
+                            contentDescription = null,
+                            tint = AccentGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "أستوديو المانهوا والصور الطويلة والعملاقة",
+                            color = WhitePure,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "نظام متكامل للتعامل مع الصور حتى 800×10000+ بكسل بدقة أصلية 100%",
+                            color = WhiteMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Card 1: Free Slicer
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, GrayBorderSubtle, RoundedCornerShape(16.dp))
+                        .clickable { onOpenSlicer() }
+                        .testTag("home_manhwa_slicer_card"),
+                    color = DarkSurfaceHighlight,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFFD32F2F).copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCut,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF5252),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color.White.copy(alpha = 0.1f)
+                            ) {
+                                Text("قص حر", color = WhiteComfortable, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "قص وتجزئة الصور ✂️",
+                            color = WhitePure,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "قص الصورة إلى أي عدد من الأجزاء بأحجام مخصصة بدون قيود وبدقة أصلية كاملة",
+                            color = WhiteMuted,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+
+                // Card 2: Stitcher / Merger
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, GrayBorderSubtle, RoundedCornerShape(16.dp))
+                        .clickable { onOpenStitcher() }
+                        .testTag("home_manhwa_stitcher_card"),
+                    color = DarkSurfaceHighlight,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(AccentGreen.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ViewAgenda,
+                                    contentDescription = null,
+                                    tint = AccentGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = AccentGreen.copy(alpha = 0.15f)
+                            ) {
+                                Text("تجميع ذكي", color = AccentGreen, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "تجميع ودمج الصور 📑",
+                            color = WhitePure,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "استيراد صور مسبقة، ترتيبها بالاسم (page1, page2...) أو يدوياً ودمجها لصورة طويلة",
+                            color = WhiteMuted,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun QuickPresetsRow(
     onSelectPreset: (String, Int, Int) -> Unit,
     onCustomClick: () -> Unit
@@ -372,18 +557,18 @@ private fun QuickPresetsRow(
                 onClick = { onSelectPreset("لوحة مربعة", 1080, 1080) }
             )
             PresetChip(
+                label = "مانهوا ويبتون",
+                desc = "800×8000",
+                icon = Icons.Default.ViewAgenda,
+                modifier = Modifier.weight(1f),
+                onClick = { onSelectPreset("شريط مانهوا", 800, 8000) }
+            )
+            PresetChip(
                 label = "ستوري 9:16",
                 desc = "1080×1920",
                 icon = Icons.Default.AspectRatio,
                 modifier = Modifier.weight(1f),
                 onClick = { onSelectPreset("لوحة ستوري", 1080, 1920) }
-            )
-            PresetChip(
-                label = "عريضة 16:9",
-                desc = "1920×1080",
-                icon = Icons.Default.AspectRatio,
-                modifier = Modifier.weight(1f),
-                onClick = { onSelectPreset("لوحة سينمائية", 1920, 1080) }
             )
             PresetChip(
                 label = "مخصص",
@@ -766,16 +951,16 @@ private fun CreateProjectDialog(
                         Text("1:1 مربع", fontSize = 11.sp)
                     }
                     TextButton(
+                        onClick = { widthText = "800"; heightText = "8000" },
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentGreen)
+                    ) {
+                        Text("مانهوا 800×8000", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
                         onClick = { widthText = "1080"; heightText = "1920" },
                         colors = ButtonDefaults.textButtonColors(contentColor = WhiteComfortable)
                     ) {
                         Text("9:16 ستوري", fontSize = 11.sp)
-                    }
-                    TextButton(
-                        onClick = { widthText = "1920"; heightText = "1080" },
-                        colors = ButtonDefaults.textButtonColors(contentColor = WhiteComfortable)
-                    ) {
-                        Text("16:9 سينمائي", fontSize = 11.sp)
                     }
                 }
             }
@@ -785,7 +970,7 @@ private fun CreateProjectDialog(
             Button(
                 onClick = {
                     val w = widthText.toIntOrNull()?.coerceIn(100, 4096) ?: 1080
-                    val h = heightText.toIntOrNull()?.coerceIn(100, 4096) ?: 1080
+                    val h = heightText.toIntOrNull()?.coerceIn(100, 16384) ?: 1080
                     val finalTitle = title.ifBlank { "لوحة جديدة" }
                     onCreate(finalTitle, w, h)
                 },

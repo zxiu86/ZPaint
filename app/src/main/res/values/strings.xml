@@ -54,4 +54,7 @@
     <string name="brush_opacity">كثافة الفرشاة</string>
     <string name="brush_smoothing">تثبيت ونعومة الحركة</string>
     <string name="zero_latency">وضع الاستجابة الفائقة (صفر تأخير)</string>
+    <string name="manhwa_studio">أستوديو المانهوا والصور العملاقة</string>
+    <string name="manhwa_slicer">أداة القص الحر للصور الطويلة</string>
+    <string name="manhwa_stitcher">تجميع ودمج الصور عمودياً</string>
 </resources>
