@@ -273,7 +273,7 @@ private fun ManhwaStudioTopBar(
                             border = androidx.compose.foundation.BorderStroke(1.dp, AccentGreen)
                         ) {
                             Text(
-                                text = "v1.3.0 Pro",
+                                text = "v1.3.1 Pro",
                                 color = AccentGreen,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,

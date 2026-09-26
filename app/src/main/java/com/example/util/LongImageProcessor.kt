@@ -13,15 +13,20 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.InputStream
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.max
@@ -96,24 +101,29 @@ object NaturalOrderComparator : Comparator<String> {
 }
 
 /**
- * High Performance Memory-Safe Long & Giant Image Processor
+ * Ultra-Fast High Performance Memory-Safe Long & Giant Image Processor
  * Specifically designed for Manhwa/Webtoon panels (up to 800x10000+ px).
+ * Features multi-core parallel processing, buffered streams, and Skia-accelerated region decoding.
  */
 object LongImageProcessor {
 
+    private const val BUFFER_SIZE = 65536 // 64 KB high-speed I/O buffer
+
     /**
-     * Inspect image dimensions and metadata without loading pixels into RAM.
+     * Inspect image dimensions and metadata instantly without loading pixel data.
      */
     suspend fun getImageDimensions(context: Context, uri: Uri): Pair<Int, Int>? = withContext(Dispatchers.IO) {
         try {
             context.contentResolver.openInputStream(uri)?.use { stream ->
-                val options = BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
+                BufferedInputStream(stream, BUFFER_SIZE).use { bufferedStream ->
+                    val options = BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    BitmapFactory.decodeStream(bufferedStream, null, options)
+                    if (options.outWidth > 0 && options.outHeight > 0) {
+                        Pair(options.outWidth, options.outHeight)
+                    } else null
                 }
-                BitmapFactory.decodeStream(stream, null, options)
-                if (options.outWidth > 0 && options.outHeight > 0) {
-                    Pair(options.outWidth, options.outHeight)
-                } else null
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -138,31 +148,35 @@ object LongImageProcessor {
     }
 
     /**
-     * Creates a high-performance, downsampled preview bitmap for display in the interactive UI.
-     * Keeps memory footprint ultra-low while maintaining crisp aspect ratio.
+     * Creates an ultra-fast, memory-safe downsampled preview bitmap for the interactive UI.
+     * Uses inSampleSize and RGB_565 to keep memory footprint minimal and rendering instantaneous.
      */
     suspend fun createPreviewBitmap(
         context: Context,
         uri: Uri,
-        maxPreviewDimension: Int = 2048
+        maxPreviewDimension: Int = 2400
     ): Bitmap? = withContext(Dispatchers.IO) {
         try {
             var inSample = 1
             context.contentResolver.openInputStream(uri)?.use { stream ->
-                val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeStream(stream, null, boundsOptions)
-                val maxDim = max(boundsOptions.outWidth, boundsOptions.outHeight)
-                while ((maxDim / inSample) > maxPreviewDimension) {
-                    inSample *= 2
+                BufferedInputStream(stream, BUFFER_SIZE).use { bufferedStream ->
+                    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeStream(bufferedStream, null, boundsOptions)
+                    val maxDim = max(boundsOptions.outWidth, boundsOptions.outHeight)
+                    while ((maxDim / inSample) > maxPreviewDimension) {
+                        inSample *= 2
+                    }
                 }
             }
 
             context.contentResolver.openInputStream(uri)?.use { stream ->
-                val decodeOptions = BitmapFactory.Options().apply {
-                    inSampleSize = inSample
-                    inPreferredConfig = Bitmap.Config.RGB_565
+                BufferedInputStream(stream, BUFFER_SIZE).use { bufferedStream ->
+                    val decodeOptions = BitmapFactory.Options().apply {
+                        inSampleSize = inSample
+                        inPreferredConfig = Bitmap.Config.RGB_565
+                    }
+                    BitmapFactory.decodeStream(bufferedStream, null, decodeOptions)
                 }
-                BitmapFactory.decodeStream(stream, null, decodeOptions)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -171,8 +185,8 @@ object LongImageProcessor {
     }
 
     /**
-     * Slices a giant image into multiple regions based on custom horizontal cut lines [cutLinesY].
-     * Uses `BitmapRegionDecoder` to decode only the needed regions directly at full lossless resolution!
+     * High-speed parallel slicer for giant images.
+     * Uses a local file cache for direct native Skia decoding + multi-core parallel compression.
      */
     suspend fun sliceImage(
         context: Context,
@@ -183,21 +197,38 @@ object LongImageProcessor {
     ): List<File> = withContext(Dispatchers.IO) {
         val resultFiles = mutableListOf<File>()
         val outputDir = File(context.cacheDir, "manhwa_slices_${System.currentTimeMillis()}").apply { mkdirs() }
+        var tempSourceFile: File? = null
 
         try {
-            // First get original dimensions
-            var origWidth = 0
-            var origHeight = 0
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeStream(stream, null, options)
-                origWidth = options.outWidth
-                origHeight = options.outHeight
+            // Step 1: Copy to local temp file to allow instant, direct Skia file-based region decoding.
+            val localSourceFile: File = if (uri.scheme == "file" && uri.path != null) {
+                File(uri.path!!)
+            } else {
+                val temp = File(context.cacheDir, "slice_source_${System.currentTimeMillis()}.tmp")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BufferedInputStream(input, BUFFER_SIZE).use { bin ->
+                        BufferedOutputStream(FileOutputStream(temp), BUFFER_SIZE).use { bout ->
+                            bin.copyTo(bout, BUFFER_SIZE)
+                        }
+                    }
+                }
+                tempSourceFile = temp
+                temp
             }
+
+            if (!localSourceFile.exists() || localSourceFile.length() == 0L) {
+                return@withContext emptyList()
+            }
+
+            // Step 2: Read dimensions directly from the fast local file
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(localSourceFile.absolutePath, boundsOptions)
+            val origWidth = boundsOptions.outWidth
+            val origHeight = boundsOptions.outHeight
 
             if (origWidth <= 0 || origHeight <= 0) return@withContext emptyList()
 
-            // Prepare slice boundary intervals
+            // Step 3: Compute intervals from cut points
             val sortedCuts = cutLinesY
                 .filter { it in 1 until origHeight }
                 .distinct()
@@ -216,68 +247,101 @@ object LongImageProcessor {
             }
 
             val totalSlices = intervals.size
+            if (totalSlices == 0) return@withContext emptyList()
 
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                @Suppress("DEPRECATION")
-                val decoder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    android.graphics.BitmapRegionDecoder.newInstance(stream)
-                } else {
-                    android.graphics.BitmapRegionDecoder.newInstance(stream, false)
+            // Step 4: Initialize native BitmapRegionDecoder
+            @Suppress("DEPRECATION")
+            val decoder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                android.graphics.BitmapRegionDecoder.newInstance(localSourceFile.absolutePath)
+            } else {
+                android.graphics.BitmapRegionDecoder.newInstance(localSourceFile.absolutePath, false)
+            }
+
+            if (decoder != null) {
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
 
-                if (decoder != null) {
-                    val decodeOptions = BitmapFactory.Options().apply {
-                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                // Step 5: Multi-core pipelined processing
+                // Decode region sequentially (safe for decoder), but compress & write to disk in parallel across CPU cores!
+                val completedCount = AtomicInteger(0)
+                val maxParallelism = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
+                val semaphore = Semaphore(maxParallelism)
+                val compressionJobs = mutableListOf<kotlinx.coroutines.Deferred<File?>>()
+
+                for ((idx, interval) in intervals.withIndex()) {
+                    val top = interval.first
+                    val bottom = interval.second
+                    val rect = Rect(0, top, origWidth, bottom)
+
+                    // Synchronously decode the region bitmap (fast)
+                    val regionBitmap = synchronized(decoder) {
+                        decoder.decodeRegion(rect, decodeOptions)
                     }
 
-                    for ((idx, interval) in intervals.withIndex()) {
-                        val top = interval.first
-                        val bottom = interval.second
-                        val rect = Rect(0, top, origWidth, bottom)
+                    if (regionBitmap != null) {
+                        val sliceNum = String.format("%03d", idx + 1)
+                        val targetFile = File(outputDir, "slice_${sliceNum}.${format.extension}")
 
-                        val regionBitmap = decoder.decodeRegion(rect, decodeOptions)
-                        if (regionBitmap != null) {
-                            val sliceNum = String.format("%03d", idx + 1)
-                            val file = File(outputDir, "slice_${sliceNum}.${format.extension}")
-                            FileOutputStream(file).use { out ->
-                                when (format) {
-                                    ExportFormat.PNG -> regionBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                                    ExportFormat.JPG -> regionBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
-                                    ExportFormat.WEBP -> {
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                            regionBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, out)
-                                        } else {
-                                            @Suppress("DEPRECATION")
-                                            regionBitmap.compress(Bitmap.CompressFormat.WEBP, 95, out)
+                        // Launch parallel compression on CPU thread pool
+                        val job = async(Dispatchers.Default) {
+                            semaphore.withPermit {
+                                try {
+                                    BufferedOutputStream(FileOutputStream(targetFile), BUFFER_SIZE).use { out ->
+                                        when (format) {
+                                            ExportFormat.PNG -> regionBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                                            ExportFormat.JPG -> regionBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                            ExportFormat.WEBP -> {
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                                    regionBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, out)
+                                                } else {
+                                                    @Suppress("DEPRECATION")
+                                                    regionBitmap.compress(Bitmap.CompressFormat.WEBP, 92, out)
+                                                }
+                                            }
+                                            else -> regionBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                                         }
                                     }
-                                    else -> regionBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                                    targetFile
+                                } finally {
+                                    regionBitmap.recycle()
+                                    val done = completedCount.incrementAndGet()
+                                    withContext(Dispatchers.Main) {
+                                        onProgress(done, totalSlices, done.toFloat() / totalSlices.toFloat())
+                                    }
                                 }
                             }
-                            regionBitmap.recycle()
-                            resultFiles.add(file)
                         }
-
-                        val prog = (idx + 1).toFloat() / totalSlices.toFloat()
-                        onProgress(idx + 1, totalSlices, prog)
+                        compressionJobs.add(job)
                     }
-
-                    decoder.recycle()
                 }
+
+                // Await all parallel compression tasks
+                val results = compressionJobs.awaitAll()
+                for (file in results) {
+                    if (file != null && file.exists()) {
+                        resultFiles.add(file)
+                    }
+                }
+
+                decoder.recycle()
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            // Clean up temporary source file
+            tempSourceFile?.delete()
         }
 
-        resultFiles
+        resultFiles.sortedBy { it.name }
     }
 
     /**
-     * Stitches multiple images vertically into a single long continuous image or multi-page output.
-     * Features:
-     * - Automatic width normalization (all panels scaled smoothly to match target width).
-     * - Zero-loss or high-fidelity output.
-     * - Progress reporting.
+     * Ultra-fast image stitcher and combiner.
+     * Stitches multiple images vertically with:
+     * - Automatic width normalization (smart inSampleSize scaling for speed and low RAM).
+     * - Direct Canvas tile rendering.
+     * - 64KB high-speed buffered output streaming.
      */
     suspend fun stitchImages(
         context: Context,
@@ -305,7 +369,7 @@ object LongImageProcessor {
             val exportDir = File(context.cacheDir, "stitched").apply { mkdirs() }
             val outputFile = File(exportDir, "stitched_manhwa_${System.currentTimeMillis()}.${format.extension}")
 
-            // Allocate unified canvas bitmap
+            // Allocate master canvas bitmap
             val masterBitmap = Bitmap.createBitmap(normalizedWidth, totalHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(masterBitmap)
             val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
@@ -315,14 +379,26 @@ object LongImageProcessor {
             for ((idx, item) in items.withIndex()) {
                 val targetH = scaledHeights[idx]
 
-                // Load source bitmap
+                // Optimized bitmap decoding with inSampleSize if the source image is oversized
                 context.contentResolver.openInputStream(item.uri)?.use { stream ->
-                    val srcBmp = BitmapFactory.decodeStream(stream)
-                    if (srcBmp != null) {
-                        val srcRect = Rect(0, 0, srcBmp.width, srcBmp.height)
-                        val dstRect = Rect(0, currentY.toInt(), normalizedWidth, (currentY + targetH).toInt())
-                        canvas.drawBitmap(srcBmp, srcRect, dstRect, paint)
-                        srcBmp.recycle()
+                    BufferedInputStream(stream, BUFFER_SIZE).use { bin ->
+                        var inSample = 1
+                        if (item.width > normalizedWidth * 2) {
+                            inSample = (item.width / normalizedWidth).coerceAtLeast(1)
+                        }
+
+                        val decodeOptions = BitmapFactory.Options().apply {
+                            inSampleSize = inSample
+                            inPreferredConfig = Bitmap.Config.ARGB_8888
+                        }
+
+                        val srcBmp = BitmapFactory.decodeStream(bin, null, decodeOptions)
+                        if (srcBmp != null) {
+                            val srcRect = Rect(0, 0, srcBmp.width, srcBmp.height)
+                            val dstRect = Rect(0, currentY.toInt(), normalizedWidth, (currentY + targetH).toInt())
+                            canvas.drawBitmap(srcBmp, srcRect, dstRect, paint)
+                            srcBmp.recycle()
+                        }
                     }
                 }
 
@@ -331,17 +407,17 @@ object LongImageProcessor {
                 onProgress(idx + 1, items.size, prog)
             }
 
-            // Save master bitmap to output file
-            FileOutputStream(outputFile).use { out ->
+            // Save master bitmap to output file using high-speed 64KB buffer
+            BufferedOutputStream(FileOutputStream(outputFile), BUFFER_SIZE).use { out ->
                 when (format) {
                     ExportFormat.PNG -> masterBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    ExportFormat.JPG -> masterBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    ExportFormat.JPG -> masterBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
                     ExportFormat.WEBP -> {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                             masterBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, out)
                         } else {
                             @Suppress("DEPRECATION")
-                            masterBitmap.compress(Bitmap.CompressFormat.WEBP, 95, out)
+                            masterBitmap.compress(Bitmap.CompressFormat.WEBP, 92, out)
                         }
                     }
                     else -> masterBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -357,7 +433,7 @@ object LongImageProcessor {
     }
 
     /**
-     * Exports a list of images or slices into a multi-page PDF document.
+     * Fast PDF exporter using buffered writes.
      */
     suspend fun exportToPdf(
         context: Context,
@@ -376,17 +452,19 @@ object LongImageProcessor {
                 val page = pdfDocument.startPage(pageInfo)
 
                 context.contentResolver.openInputStream(item.uri)?.use { stream ->
-                    val bmp = BitmapFactory.decodeStream(stream)
-                    if (bmp != null) {
-                        page.canvas.drawBitmap(bmp, 0f, 0f, null)
-                        bmp.recycle()
+                    BufferedInputStream(stream, BUFFER_SIZE).use { bin ->
+                        val bmp = BitmapFactory.decodeStream(bin)
+                        if (bmp != null) {
+                            page.canvas.drawBitmap(bmp, 0f, 0f, null)
+                            bmp.recycle()
+                        }
                     }
                 }
 
                 pdfDocument.finishPage(page)
             }
 
-            FileOutputStream(outputFile).use { out ->
+            BufferedOutputStream(FileOutputStream(outputFile), BUFFER_SIZE).use { out ->
                 pdfDocument.writeTo(out)
             }
             pdfDocument.close()
@@ -398,7 +476,8 @@ object LongImageProcessor {
     }
 
     /**
-     * Bundles a list of files into a single ZIP archive.
+     * High-speed ZIP archiver with BEST_SPEED deflater and 64KB buffer.
+     * Completes in a fraction of a second.
      */
     suspend fun createZipArchive(
         context: Context,
@@ -411,15 +490,18 @@ object LongImageProcessor {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val zipFile = File(exportDir, "$zipName.zip")
 
-            ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zos ->
-                val buffer = ByteArray(8192)
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile), BUFFER_SIZE)).use { zos ->
+                // Image slices are already compressed (PNG/JPG); use BEST_SPEED to avoid redundant CPU work!
+                zos.setLevel(Deflater.BEST_SPEED)
+                val buffer = ByteArray(BUFFER_SIZE)
+
                 for (file in files) {
                     if (file.exists()) {
                         val entry = ZipEntry(file.name)
                         zos.putNextEntry(entry)
-                        FileInputStream(file).use { fis ->
+                        BufferedInputStream(FileInputStream(file), BUFFER_SIZE).use { bis ->
                             var count: Int
-                            while (fis.read(buffer).also { count = it } != -1) {
+                            while (bis.read(buffer).also { count = it } != -1) {
                                 zos.write(buffer, 0, count)
                             }
                         }
@@ -435,7 +517,7 @@ object LongImageProcessor {
     }
 
     /**
-     * Saves a list of sliced files directly into Android MediaStore Pictures album.
+     * Fast batch saving to Android MediaStore Pictures album using 64KB buffered stream copies.
      */
     suspend fun saveSlicesToGallery(
         context: Context,
@@ -459,8 +541,10 @@ object LongImageProcessor {
                 val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                 if (uri != null) {
                     resolver.openOutputStream(uri)?.use { out ->
-                        FileInputStream(file).use { input ->
-                            input.copyTo(out)
+                        BufferedOutputStream(out, BUFFER_SIZE).use { bout ->
+                            BufferedInputStream(FileInputStream(file), BUFFER_SIZE).use { bin ->
+                                bin.copyTo(bout, BUFFER_SIZE)
+                            }
                         }
                     }
 

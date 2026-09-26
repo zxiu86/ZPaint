@@ -18,8 +18,8 @@ android {
     applicationId = "com.zpaint.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.3.0"
+    versionCode = 4
+    versionName = "1.3.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -49,10 +49,26 @@ android {
       }
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      val releaseKeystore = file("${rootDir}/release.keystore")
+      val base64Keystore = file("${rootDir}/release.keystore.base64")
+      if (!releaseKeystore.exists() && base64Keystore.exists()) {
+        try {
+          val decoded = Base64.getMimeDecoder().decode(base64Keystore.readText().trim())
+          releaseKeystore.writeBytes(decoded)
+        } catch (_: Exception) {}
+      }
+
+      if (releaseKeystore.exists()) {
+        storeFile = releaseKeystore
+        storePassword = System.getenv("STORE_PASSWORD") ?: "zpaint123456"
+        keyAlias = System.getenv("KEY_ALIAS") ?: "zpaint"
+        keyPassword = System.getenv("KEY_PASSWORD") ?: "zpaint123456"
+      } else {
+        storeFile = file("${rootDir}/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
   }
 

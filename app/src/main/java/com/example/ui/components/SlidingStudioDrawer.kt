@@ -803,7 +803,7 @@ fun SlidingToolsAndGuidesContent(
                             shape = RoundedCornerShape(6.dp),
                             color = AccentGreen.copy(alpha = 0.2f)
                         ) {
-                            Text(text = "v1.3.0", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            Text(text = "v1.3.1", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
                     Text(

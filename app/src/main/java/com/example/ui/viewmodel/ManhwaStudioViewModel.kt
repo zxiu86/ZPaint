@@ -11,6 +11,9 @@ import com.example.util.LongImageProcessor
 import com.example.util.NaturalOrderComparator
 import com.example.util.StitchImageItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -300,19 +303,22 @@ class ManhwaStudioViewModel(application: Application) : AndroidViewModel(applica
 
     fun addStitchImages(uris: List<Uri>) {
         viewModelScope.launch {
-            val newItems = mutableListOf<StitchImageItem>()
-            for (uri in uris) {
-                val dims = LongImageProcessor.getImageDimensions(context, uri)
-                val fileName = LongImageProcessor.getFileName(context, uri)
-                newItems.add(
-                    StitchImageItem(
-                        id = UUID.randomUUID().toString(),
-                        uri = uri,
-                        fileName = fileName,
-                        width = dims?.first ?: 800,
-                        height = dims?.second ?: 1200
-                    )
-                )
+            val newItems: List<StitchImageItem> = withContext(Dispatchers.IO) {
+                coroutineScope {
+                    uris.map { uri ->
+                        async {
+                            val dims = LongImageProcessor.getImageDimensions(context, uri)
+                            val fileName = LongImageProcessor.getFileName(context, uri)
+                            StitchImageItem(
+                                id = UUID.randomUUID().toString(),
+                                uri = uri,
+                                fileName = fileName,
+                                width = dims?.first ?: 800,
+                                height = dims?.second ?: 1200
+                            )
+                        }
+                    }.awaitAll()
+                }
             }
 
             val combined = _stitchItems.value + newItems
