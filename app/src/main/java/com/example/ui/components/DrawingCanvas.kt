@@ -73,6 +73,7 @@ fun DrawingCanvas(
             h = 31 * h + l.id.hashCode()
             h = 31 * h + l.isVisible.hashCode()
             h = 31 * h + (l.opacity * 1000).toInt()
+            h = 31 * h + (l.imagePath?.hashCode() ?: 0)
             h = 31 * h + l.strokes.size
             if (l.strokes.isNotEmpty()) {
                 h = 31 * h + l.strokes.last().id.hashCode()

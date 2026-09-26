@@ -37,6 +37,10 @@ object ProjectSerializer {
                 layerObj.put("isVisible", layer.isVisible)
                 layerObj.put("isLocked", layer.isLocked)
                 layerObj.put("opacity", layer.opacity.toDouble())
+                layerObj.put("blendMode", layer.blendMode)
+                if (layer.imagePath != null) {
+                    layerObj.put("imagePath", layer.imagePath)
+                }
 
                 val strokesArray = JSONArray()
                 layer.strokes.forEach { stroke ->
@@ -97,6 +101,8 @@ object ProjectSerializer {
                             val isVisible = layerObj.optBoolean("isVisible", true)
                             val isLocked = layerObj.optBoolean("isLocked", false)
                             val opacity = layerObj.optDouble("opacity", 1.0).toFloat()
+                            val blendMode = layerObj.optString("blendMode", "عادي")
+                            val imagePath = if (layerObj.has("imagePath")) layerObj.optString("imagePath") else null
 
                             val strokesList = mutableListOf<DrawingStroke>()
                             val strokesArray = layerObj.optJSONArray("strokes")
@@ -149,7 +155,9 @@ object ProjectSerializer {
                                     isVisible = isVisible,
                                     isLocked = isLocked,
                                     opacity = opacity,
-                                    strokes = strokesList
+                                    blendMode = blendMode,
+                                    strokes = strokesList,
+                                    imagePath = imagePath
                                 )
                             )
                         }

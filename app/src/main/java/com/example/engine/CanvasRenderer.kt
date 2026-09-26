@@ -43,6 +43,23 @@ object CanvasRenderer {
                 val layerBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
                 val layerCanvas = Canvas(layerBitmap)
 
+                // Draw layer background image if present (imported photo or sliced manhwa panel)
+                if (layer.imagePath != null) {
+                    val imgFile = java.io.File(layer.imagePath)
+                    if (imgFile.exists()) {
+                        try {
+                            val imgBmp = android.graphics.BitmapFactory.decodeFile(layer.imagePath)
+                            if (imgBmp != null) {
+                                val imgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                                val srcRect = android.graphics.Rect(0, 0, imgBmp.width, imgBmp.height)
+                                val dstRect = android.graphics.Rect(0, 0, bitmap.width, bitmap.height)
+                                layerCanvas.drawBitmap(imgBmp, srcRect, dstRect, imgPaint)
+                                imgBmp.recycle()
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+
                 layer.strokes.forEach { stroke ->
                     drawStroke(layerCanvas, stroke)
                 }

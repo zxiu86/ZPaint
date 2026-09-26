@@ -140,6 +140,7 @@ fun ManhwaStudioScreen(
     viewModel: ManhwaStudioViewModel,
     onNavigateBack: () -> Unit,
     onOpenInDrawingCanvas: (width: Int, height: Int) -> Unit = { _, _ -> },
+    onEditSlices: (List<File>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
@@ -213,7 +214,10 @@ fun ManhwaStudioScreen(
                     .weight(1f)
             ) {
                 when (selectedTab) {
-                    ManhwaStudioTab.SLICER -> ManhwaSlicerContent(viewModel = viewModel)
+                    ManhwaStudioTab.SLICER -> ManhwaSlicerContent(
+                        viewModel = viewModel,
+                        onEditSlices = onEditSlices
+                    )
                     ManhwaStudioTab.STITCHER -> ManhwaStitcherContent(
                         viewModel = viewModel,
                         onOpenInDrawingCanvas = onOpenInDrawingCanvas
@@ -298,7 +302,8 @@ private fun ManhwaStudioTopBar(
 
 @Composable
 private fun ManhwaSlicerContent(
-    viewModel: ManhwaStudioViewModel
+    viewModel: ManhwaStudioViewModel,
+    onEditSlices: (List<File>) -> Unit = {}
 ) {
     val context = LocalContext.current
     val selectedImageUri by viewModel.selectedImageUri.collectAsStateWithLifecycle()
@@ -535,6 +540,22 @@ private fun ManhwaSlicerContent(
                 exportStatus = exportStatus,
                 selectedFormat = selectedExportFormat,
                 onSelectFormat = { selectedExportFormat = it },
+                onEditClick = {
+                    if (exportedFiles.isNotEmpty()) {
+                        onEditSlices(exportedFiles)
+                    } else {
+                        viewModel.exportSlices(
+                            format = selectedExportFormat,
+                            saveToGallery = false,
+                            createZip = false,
+                            onComplete = { files, _, _ ->
+                                if (files.isNotEmpty()) {
+                                    onEditSlices(files)
+                                }
+                            }
+                        )
+                    }
+                },
                 onExportClick = {
                     viewModel.exportSlices(
                         format = selectedExportFormat,
@@ -587,20 +608,37 @@ private fun ManhwaSlicerContent(
             },
             containerColor = DarkSurface,
             confirmButton = {
-                Button(
-                    onClick = {
-                        showSuccessDialog = false
-                        if (exportedZip != null) {
-                            ExportUtil.shareFile(context, exportedZip!!, "application/zip", "Manhwa Slices ZIP")
-                        } else if (exportedFiles.isNotEmpty()) {
-                            ExportUtil.shareFile(context, exportedFiles.first(), "image/png", "Manhwa Slice")
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = WhitePure, contentColor = Color.Black)
-                ) {
-                    Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("مشاركة القصاصات", fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Direct Edit Button as requested by user
+                    Button(
+                        onClick = {
+                            showSuccessDialog = false
+                            onEditSlices(exportedFiles)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen, contentColor = Color.Black),
+                        modifier = Modifier.testTag("slicer_success_edit_btn")
+                    ) {
+                        Icon(Icons.Default.Brush, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("تحرير القصاصات", fontWeight = FontWeight.Bold)
+                    }
+
+                    // Share button
+                    Button(
+                        onClick = {
+                            showSuccessDialog = false
+                            if (exportedZip != null) {
+                                ExportUtil.shareFile(context, exportedZip!!, "application/zip", "Manhwa Slices ZIP")
+                            } else if (exportedFiles.isNotEmpty()) {
+                                ExportUtil.shareFile(context, exportedFiles.first(), "image/png", "Manhwa Slice")
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceElevated, contentColor = WhitePure)
+                    ) {
+                        Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("مشاركة")
+                    }
                 }
             },
             dismissButton = {
@@ -789,6 +827,7 @@ private fun SlicesExportDock(
     exportStatus: String,
     selectedFormat: ExportFormat,
     onSelectFormat: (ExportFormat) -> Unit,
+    onEditClick: () -> Unit = {},
     onExportClick: () -> Unit
 ) {
     Surface(
@@ -880,24 +919,47 @@ private fun SlicesExportDock(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Main Action Button
-            Button(
-                onClick = onExportClick,
-                enabled = !isExporting && slices.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentGreen, contentColor = Color.Black),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("slicer_export_btn")
+            // Action Buttons: Direct Edit in Canvas & Cut Export
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Default.ContentCut, null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "قص وتصدير ${slices.size} أجزاء بدقة كاملة",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                // Secondary Direct Edit Button
+                Button(
+                    onClick = onEditClick,
+                    enabled = !isExporting && slices.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceElevated, contentColor = WhitePure),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .weight(0.38f)
+                        .height(48.dp)
+                        .border(1.dp, GrayBorderComfortable, RoundedCornerShape(14.dp))
+                        .testTag("slicer_dock_edit_btn")
+                ) {
+                    Icon(Icons.Default.Brush, null, tint = AccentGreen, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "تحرير", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                // Main Export Button
+                Button(
+                    onClick = onExportClick,
+                    enabled = !isExporting && slices.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentGreen, contentColor = Color.Black),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .weight(0.62f)
+                        .height(48.dp)
+                        .testTag("slicer_export_btn")
+                ) {
+                    Icon(Icons.Default.ContentCut, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "قص وتصدير (${slices.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
             }
         }
     }

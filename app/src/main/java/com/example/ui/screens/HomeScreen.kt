@@ -312,14 +312,30 @@ private fun HomeStudioHeader(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "ZPaint Studio",
+                                color = WhitePure,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = AccentGreen.copy(alpha = 0.2f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentGreen.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "v1.3.2",
+                                    color = AccentGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         Text(
-                            text = "ZPaint Studio",
-                            color = WhitePure,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "أستوديو الرسم الرقمي والأنيميشن",
+                            text = "أستوديو الرسم الرقمي والأنيميشن والتعديل المباشر",
                             color = WhiteMuted,
                             fontSize = 12.sp
                         )

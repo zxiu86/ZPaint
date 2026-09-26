@@ -57,4 +57,7 @@
     <string name="manhwa_studio">أستوديو المانهوا والصور العملاقة</string>
     <string name="manhwa_slicer">أداة القص الحر للصور الطويلة</string>
     <string name="manhwa_stitcher">تجميع ودمج الصور عمودياً</string>
+    <string name="edit_sliced_images">التعديل المباشر على الصور المقصوصة</string>
+    <string name="import_image_from_phone">استيراد الصور مباشرة من الهاتف</string>
+    <string name="app_version">1.3.2</string>
 </resources>

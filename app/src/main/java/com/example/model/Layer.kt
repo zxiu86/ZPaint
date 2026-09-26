@@ -11,5 +11,6 @@ data class DrawingLayer(
     val opacity: Float = 1.0f, // 0.0 to 1.0
     val blendMode: String = "عادي",
     val strokes: List<DrawingStroke> = emptyList(),
+    val imagePath: String? = null,
     @Transient var cachedBitmap: Bitmap? = null
 )

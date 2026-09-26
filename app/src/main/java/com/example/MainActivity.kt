@@ -95,6 +95,10 @@ class MainActivity : ComponentActivity() {
                                 onOpenInDrawingCanvas = { width, height ->
                                     drawingViewModel.createNewProject("مانهوا مجمعة", width, height)
                                     currentScreen = AppScreen.DRAWING
+                                },
+                                onEditSlices = { sliceFiles ->
+                                    drawingViewModel.loadSlicedImagesForEditing(sliceFiles, initialIndex = 0)
+                                    currentScreen = AppScreen.DRAWING
                                 }
                             )
                         }

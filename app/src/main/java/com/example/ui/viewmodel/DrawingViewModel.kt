@@ -2,7 +2,9 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -132,6 +134,16 @@ class DrawingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _activeSlidingSheet = MutableStateFlow(ActiveSlidingSheet.NONE)
     val activeSlidingSheet: StateFlow<ActiveSlidingSheet> = _activeSlidingSheet.asStateFlow()
+
+    // Sliced Images Editing States
+    private val _slicedEditingFiles = MutableStateFlow<List<File>>(emptyList())
+    val slicedEditingFiles: StateFlow<List<File>> = _slicedEditingFiles.asStateFlow()
+
+    private val _activeSliceIndex = MutableStateFlow(0)
+    val activeSliceIndex: StateFlow<Int> = _activeSliceIndex.asStateFlow()
+
+    private val _isSlicedEditingMode = MutableStateFlow(false)
+    val isSlicedEditingMode: StateFlow<Boolean> = _isSlicedEditingMode.asStateFlow()
 
     private var playbackJob: Job? = null
     private var autoSaveJob: Job? = null
@@ -748,6 +760,165 @@ class DrawingViewModel(application: Application) : AndroidViewModel(application)
 
             // Trigger cloud synchronization
             syncManager.triggerSync(proj)
+        }
+    }
+
+    // --- Sliced Images Interactive Editing Mode ---
+
+    fun loadSlicedImagesForEditing(files: List<File>, initialIndex: Int = 0) {
+        if (files.isEmpty()) return
+        _slicedEditingFiles.value = files
+        _isSlicedEditingMode.value = true
+        val safeIndex = initialIndex.coerceIn(0, files.size - 1)
+        _activeSliceIndex.value = safeIndex
+        loadSliceAtIndex(safeIndex)
+    }
+
+    fun switchActiveSlice(newIndex: Int) {
+        val files = _slicedEditingFiles.value
+        if (newIndex !in files.indices) return
+        saveCurrentSliceEdits()
+        _activeSliceIndex.value = newIndex
+        loadSliceAtIndex(newIndex)
+    }
+
+    fun exitSlicedEditingMode() {
+        saveCurrentSliceEdits()
+        _isSlicedEditingMode.value = false
+        _slicedEditingFiles.value = emptyList()
+    }
+
+    private fun loadSliceAtIndex(index: Int) {
+        val files = _slicedEditingFiles.value
+        if (index !in files.indices) return
+        val file = files[index]
+
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, options)
+        val w = if (options.outWidth > 0) options.outWidth else 1080
+        val h = if (options.outHeight > 0) options.outHeight else 1920
+
+        val sliceProjectTitle = "قصاصة #${index + 1} (${file.nameWithoutExtension})"
+
+        viewModelScope.launch {
+            if (_isPlayingAnimation.value) stopPlayback()
+
+            val existing = allProjects.value.firstOrNull { it.title == sliceProjectTitle }
+            if (existing != null) {
+                val loaded = repository.loadProject(existing.id)
+                if (loaded != null) {
+                    _currentProject.value = loaded
+                    _currentFrameIndex.value = 0
+                    _activeLayerId.value = loaded.frames.firstOrNull()?.layers?.lastOrNull()?.id ?: ""
+                    undoStack.clear()
+                    redoStack.clear()
+                    updateUndoRedoStates()
+                    return@launch
+                }
+            }
+
+            // Create canvas with base slice image layer and top editing layer
+            val baseLayer = DrawingLayer(
+                id = UUID.randomUUID().toString(),
+                name = "الصورة المقصوصة #${index + 1}",
+                imagePath = file.absolutePath
+            )
+            val drawingLayer = DrawingLayer(
+                id = UUID.randomUUID().toString(),
+                name = "طبقة الرسم والتعديل"
+            )
+            val project = Project(
+                id = UUID.randomUUID().toString(),
+                title = sliceProjectTitle,
+                width = w,
+                height = h,
+                frames = listOf(AnimationFrame(layers = listOf(baseLayer, drawingLayer)))
+            )
+            repository.saveProject(project)
+            _currentProject.value = project
+            _currentFrameIndex.value = 0
+            _activeLayerId.value = drawingLayer.id
+            undoStack.clear()
+            redoStack.clear()
+            updateUndoRedoStates()
+        }
+    }
+
+    fun saveCurrentSliceEdits() {
+        val proj = _currentProject.value
+        viewModelScope.launch {
+            repository.saveProject(proj)
+        }
+    }
+
+    // --- Direct Phone Image Import ---
+
+    fun importImageFromUri(uri: Uri, asNewLayer: Boolean = true, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val importedDir = File(context.filesDir, "imported_images").apply { mkdirs() }
+                val destFile = File(importedDir, "imported_${System.currentTimeMillis()}.png")
+
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(destFile.absolutePath, opts)
+                val imgW = opts.outWidth
+                val imgH = opts.outHeight
+
+                withContext(Dispatchers.Main) {
+                    if (asNewLayer) {
+                        pushUndoState()
+                        val currentLayers = getCurrentFrameLayers()
+                        val layerName = "صورة مستوردة (${imgW}×${imgH})"
+                        val newLayer = DrawingLayer(
+                            id = UUID.randomUUID().toString(),
+                            name = layerName,
+                            imagePath = destFile.absolutePath
+                        )
+                        val updatedLayers = currentLayers + newLayer
+                        applyLayersToCurrentFrame(updatedLayers)
+                        _activeLayerId.value = newLayer.id
+                        scheduleAutoSave()
+                        onComplete(true)
+                    } else {
+                        val baseLayer = DrawingLayer(
+                            id = UUID.randomUUID().toString(),
+                            name = "صورة مستوردة",
+                            imagePath = destFile.absolutePath
+                        )
+                        val drawLayer = DrawingLayer(
+                            id = UUID.randomUUID().toString(),
+                            name = "طبقة الرسم"
+                        )
+                        val project = Project(
+                            id = UUID.randomUUID().toString(),
+                            title = "صورة مستوردة ${System.currentTimeMillis() % 1000}",
+                            width = if (imgW > 0) imgW else 1080,
+                            height = if (imgH > 0) imgH else 1080,
+                            frames = listOf(AnimationFrame(layers = listOf(baseLayer, drawLayer)))
+                        )
+                        repository.saveProject(project)
+                        _currentProject.value = project
+                        _currentFrameIndex.value = 0
+                        _activeLayerId.value = drawLayer.id
+                        undoStack.clear()
+                        redoStack.clear()
+                        updateUndoRedoStates()
+                        onComplete(true)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onComplete(false)
+                }
+            }
         }
     }
 }

@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -51,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +69,7 @@ import com.example.ui.components.AnimationTimeline
 import com.example.ui.components.DrawingCanvas
 import com.example.ui.components.ProjectsGalleryDialog
 import com.example.ui.components.QuickSlidersRail
+import com.example.ui.components.SlicedImagesThumbnailsStrip
 import com.example.ui.components.SlidingStudioDrawer
 import com.example.ui.components.StudioHeader
 import com.example.ui.components.ToolPalette
@@ -77,6 +84,7 @@ import com.example.ui.theme.WhiteComfortable
 import com.example.ui.theme.WhiteMuted
 import com.example.ui.theme.WhitePure
 import com.example.ui.viewmodel.DrawingViewModel
+import com.example.util.ExportFormat
 
 @Composable
 fun DrawingScreen(
@@ -121,6 +129,31 @@ fun DrawingScreen(
         } else {
             null
         }
+    }
+
+    val context = LocalContext.current
+    val slicedFiles by viewModel.slicedEditingFiles.collectAsStateWithLifecycle()
+    val activeSliceIndex by viewModel.activeSliceIndex.collectAsStateWithLifecycle()
+    val isSlicedEditingMode by viewModel.isSlicedEditingMode.collectAsStateWithLifecycle()
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.importImageFromUri(uri, asNewLayer = true) { success ->
+                if (success) {
+                    Toast.makeText(context, "تم استيراد الصورة بنجاح كطبقة جديدة", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "فشل استيراد الصورة", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val triggerPhotoPicker = {
+        photoPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -182,6 +215,7 @@ fun DrawingScreen(
                     onOpenToolsSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.TOOLS) },
                     onOpenLayersSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.LAYERS) },
                     onOpenExportSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.EXPORT) },
+                    onImportImage = triggerPhotoPicker,
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
 
@@ -199,6 +233,30 @@ fun DrawingScreen(
                         brushOpacity = brushConfig.opacity,
                         onSizeChange = { viewModel.setBrushSize(it) },
                         onOpacityChange = { viewModel.setBrushOpacity(it) }
+                    )
+                }
+
+                // 3.5 Sliced Images Thumbnails Strip (Mini squares directly above footer tool palette)
+                AnimatedVisibility(
+                    visible = isSlicedEditingMode && slicedFiles.isNotEmpty(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = if (showAnimationTimeline) 210.dp else 84.dp),
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit = slideOutVertically { it } + fadeOut()
+                ) {
+                    SlicedImagesThumbnailsStrip(
+                        slices = slicedFiles,
+                        activeIndex = activeSliceIndex,
+                        onSelectSlice = { viewModel.switchActiveSlice(it) },
+                        onCloseStrip = { viewModel.exitSlicedEditingMode() },
+                        onExportCurrentSlice = {
+                            viewModel.exportCurrentArtwork(ExportFormat.PNG) { file ->
+                                if (file != null) {
+                                    Toast.makeText(context, "تم حفظ تعديلات القصاصة بنجاح!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -261,6 +319,7 @@ fun DrawingScreen(
                     activeSheet = activeSlidingSheet,
                     viewModel = viewModel,
                     onOpenManhwaStudio = onOpenManhwaStudio,
+                    onImportImage = triggerPhotoPicker,
                     onDismiss = { viewModel.dismissSlidingSheet() }
                 )
 

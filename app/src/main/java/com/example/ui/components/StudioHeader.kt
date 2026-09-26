@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
@@ -104,6 +105,7 @@ fun StudioHeader(
     onOpenToolsSheet: () -> Unit,
     onOpenLayersSheet: () -> Unit,
     onOpenExportSheet: () -> Unit,
+    onImportImage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -433,6 +435,28 @@ fun StudioHeader(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                }
+
+                // Direct Photo Import Action Button
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(DarkSurfaceElevated.copy(alpha = 0.7f))
+                        .border(1.dp, GrayBorderSubtle, CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = true)
+                        ) { onImportImage() }
+                        .testTag("header_import_image_btn"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AddPhotoAlternate,
+                        contentDescription = "استيراد صورة من الهاتف",
+                        tint = AccentGreen,
+                        modifier = Modifier.size(19.dp)
+                    )
                 }
 
                 // HERO EXPORT & SHARE BUTTON

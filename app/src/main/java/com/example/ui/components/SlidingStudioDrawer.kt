@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CallMerge
@@ -62,6 +64,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -121,6 +124,7 @@ fun SlidingStudioDrawer(
     activeSheet: ActiveSlidingSheet,
     viewModel: DrawingViewModel,
     onOpenManhwaStudio: () -> Unit = {},
+    onImportImage: () -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -191,8 +195,8 @@ fun SlidingStudioDrawer(
                     ) {
                         when (activeSheet) {
                             ActiveSlidingSheet.BRUSHES -> SlidingBrushesContent(viewModel)
-                            ActiveSlidingSheet.LAYERS -> SlidingLayersContent(viewModel)
-                            ActiveSlidingSheet.TOOLS -> SlidingToolsAndGuidesContent(viewModel, onOpenManhwaStudio)
+                            ActiveSlidingSheet.LAYERS -> SlidingLayersContent(viewModel, onImportImage)
+                            ActiveSlidingSheet.TOOLS -> SlidingToolsAndGuidesContent(viewModel, onOpenManhwaStudio, onImportImage)
                             ActiveSlidingSheet.COLOR -> SlidingColorPaletteContent(viewModel)
                             ActiveSlidingSheet.EXPORT -> SlidingExportContent(viewModel, onDismiss)
                             ActiveSlidingSheet.NONE -> {}
@@ -550,14 +554,17 @@ fun SlidingBrushesContent(viewModel: DrawingViewModel) {
 // 2. Sliding Layers Content (Blend modes, Opacity, Actions)
 // -------------------------------------------------------------
 @Composable
-fun SlidingLayersContent(viewModel: DrawingViewModel) {
+fun SlidingLayersContent(
+    viewModel: DrawingViewModel,
+    onImportImage: () -> Unit = {}
+) {
     val layers = viewModel.getCurrentFrameLayers().asReversed()
     val activeLayerId = viewModel.activeLayerId.value
 
     val blendModes = listOf("عادي", "مضاعفة", "شاشة", "تراكب", "إضافة", "إضاءة")
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top action bar: New Layer button
+        // Top action bar: New Layer and Import Photo buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -570,16 +577,31 @@ fun SlidingLayersContent(viewModel: DrawingViewModel) {
                 fontWeight = FontWeight.SemiBold
             )
 
-            Button(
-                onClick = { viewModel.addLayer() },
-                colors = ButtonDefaults.buttonColors(containerColor = WhitePure, contentColor = Color(0xFF101014)),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                modifier = Modifier.testTag("sliding_add_layer_btn")
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(text = "طبقة جديدة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = onImportImage,
+                    border = BorderStroke(1.dp, GrayBorderComfortable),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentGreen),
+                    modifier = Modifier.testTag("sliding_import_photo_btn")
+                ) {
+                    Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "استيراد صورة", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Button(
+                    onClick = { viewModel.addLayer() },
+                    colors = ButtonDefaults.buttonColors(containerColor = WhitePure, contentColor = Color(0xFF101014)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.testTag("sliding_add_layer_btn")
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "طبقة جديدة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
@@ -770,7 +792,8 @@ fun SlidingLayersContent(viewModel: DrawingViewModel) {
 @Composable
 fun SlidingToolsAndGuidesContent(
     viewModel: DrawingViewModel,
-    onOpenManhwaStudio: () -> Unit = {}
+    onOpenManhwaStudio: () -> Unit = {},
+    onImportImage: () -> Unit = {}
 ) {
     val showGrid = viewModel.showGrid.value
     val gridSize = viewModel.gridSize.value
@@ -783,7 +806,53 @@ fun SlidingToolsAndGuidesContent(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Section 0: Manhwa & Giant Image Studio Launcher Card
+        // Section 0: Import Photo from Phone Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(18.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "استيراد الصور مباشرة من الهاتف 📷", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = AccentGreen.copy(alpha = 0.2f)
+                        ) {
+                            Text(text = "جديد", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "استورد أي صورة من معرض هاتفك مباشرة إلى اللوحة الحالية كطبقة رسم جديدة للتعديل عليها.",
+                        color = WhiteMuted,
+                        fontSize = 11.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = onImportImage,
+                        colors = ButtonDefaults.buttonColors(containerColor = WhitePure, contentColor = Color.Black),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("tools_import_photo_btn")
+                    ) {
+                        Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "اختيار صورة من المعرض وإدراجها", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Section 0.5: Manhwa & Giant Image Studio Launcher Card
         item {
             Card(
                 modifier = Modifier
@@ -803,7 +872,7 @@ fun SlidingToolsAndGuidesContent(
                             shape = RoundedCornerShape(6.dp),
                             color = AccentGreen.copy(alpha = 0.2f)
                         ) {
-                            Text(text = "v1.3.1", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            Text(text = "v1.3.2", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
                     Text(
