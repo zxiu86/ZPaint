@@ -189,33 +189,13 @@ fun DrawingScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // 2. Dynamic, Responsive Top Header Bar (StudioHeader)
+                // 2. Minimalist, Ultra-Clean Top Header Bar (Only Back, Undo, Redo)
                 StudioHeader(
-                    projectTitle = currentProject.title,
-                    canvasWidth = currentProject.width,
-                    canvasHeight = currentProject.height,
-                    syncState = syncState,
                     canUndo = canUndo,
                     canRedo = canRedo,
-                    showQuickSliders = showQuickSliders,
-                    showAnimationTimeline = showAnimationTimeline,
-                    activeSlidingSheet = activeSlidingSheet,
-                    showGrid = showGrid,
-                    symmetryMode = symmetryMode,
-                    layerCount = currentLayers.size,
-                    frameCount = currentProject.frames.size,
-                    currentFrameIndex = currentFrameIndex,
-                    isWideScreen = isWideScreen,
                     onNavigateBack = onNavigateToHome,
-                    onOpenGallery = { showProjectsGallery = true },
                     onUndo = { viewModel.undo() },
                     onRedo = { viewModel.redo() },
-                    onToggleQuickSliders = { showQuickSliders = !showQuickSliders },
-                    onToggleAnimationTimeline = { showAnimationTimeline = !showAnimationTimeline },
-                    onOpenToolsSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.TOOLS) },
-                    onOpenLayersSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.LAYERS) },
-                    onOpenExportSheet = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.EXPORT) },
-                    onImportImage = triggerPhotoPicker,
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
 
@@ -260,13 +240,10 @@ fun DrawingScreen(
                     )
                 }
 
-                // 4. Floating Studio Dock (Responsive bottom tool palette)
+                // 4. Compact Floating Studio Dock (Responsive bottom tool palette with settings button)
                 ToolPalette(
                     brushConfig = brushConfig,
-                    layerCount = currentLayers.size,
                     onOpenBrushStudio = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.BRUSHES) },
-                    onOpenLayers = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.LAYERS) },
-                    onOpenTools = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.TOOLS) },
                     onOpenColorPicker = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.COLOR) },
                     onToggleEraser = {
                         if (brushConfig.type == BrushType.ERASER) {
@@ -285,6 +262,7 @@ fun DrawingScreen(
                         }
                     },
                     onClearLayer = { viewModel.clearActiveLayer() },
+                    onOpenSettings = { viewModel.setActiveSlidingSheet(ActiveSlidingSheet.SETTINGS) },
                     onQuickSizeChange = { viewModel.setBrushSize(it) },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -314,10 +292,20 @@ fun DrawingScreen(
                     )
                 }
 
-                // 6. Sliding Studio Drawer (Responsive sliding panel with Brushes, Layers, Tools, Color, Export)
+                // 6. Sliding Studio Drawer (Responsive sliding panel with Settings, Brushes, Layers, Tools, Color, Export)
                 SlidingStudioDrawer(
                     activeSheet = activeSlidingSheet,
                     viewModel = viewModel,
+                    projectTitle = currentProject.title,
+                    canvasWidth = currentProject.width,
+                    canvasHeight = currentProject.height,
+                    syncState = syncState,
+                    showQuickSliders = showQuickSliders,
+                    showAnimationTimeline = showAnimationTimeline,
+                    frameCount = currentProject.frames.size,
+                    onToggleQuickSliders = { showQuickSliders = !showQuickSliders },
+                    onToggleAnimationTimeline = { showAnimationTimeline = !showAnimationTimeline },
+                    onOpenGallery = { showProjectsGallery = true },
                     onOpenManhwaStudio = onOpenManhwaStudio,
                     onImportImage = triggerPhotoPicker,
                     onDismiss = { viewModel.dismissSlidingSheet() }

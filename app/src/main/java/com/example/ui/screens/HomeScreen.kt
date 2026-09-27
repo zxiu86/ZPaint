@@ -326,7 +326,7 @@ private fun HomeStudioHeader(
                                 border = androidx.compose.foundation.BorderStroke(1.dp, AccentGreen.copy(alpha = 0.5f))
                             ) {
                                 Text(
-                                    text = "v1.3.2",
+                                    text = "v1.3.3",
                                     color = AccentGreen,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,

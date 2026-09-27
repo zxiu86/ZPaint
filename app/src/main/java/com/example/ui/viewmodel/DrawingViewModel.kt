@@ -472,6 +472,32 @@ class DrawingViewModel(application: Application) : AndroidViewModel(application)
         scheduleAutoSave()
     }
 
+    fun moveLayerUp(layerId: String) {
+        val currentLayers = getCurrentFrameLayers()
+        val index = currentLayers.indexOfFirst { it.id == layerId }
+        // In layer stack, higher index means drawn on top. Moving up means index + 1
+        if (index < 0 || index >= currentLayers.size - 1) return
+        pushUndoState()
+        val updated = currentLayers.toMutableList()
+        val item = updated.removeAt(index)
+        updated.add(index + 1, item)
+        applyLayersToCurrentFrame(updated)
+        scheduleAutoSave()
+    }
+
+    fun moveLayerDown(layerId: String) {
+        val currentLayers = getCurrentFrameLayers()
+        val index = currentLayers.indexOfFirst { it.id == layerId }
+        // Lower index means drawn towards bottom. Moving down means index - 1
+        if (index <= 0) return
+        pushUndoState()
+        val updated = currentLayers.toMutableList()
+        val item = updated.removeAt(index)
+        updated.add(index - 1, item)
+        applyLayersToCurrentFrame(updated)
+        scheduleAutoSave()
+    }
+
     fun clearActiveLayer() {
         val active = getActiveLayer() ?: return
         pushUndoState()

@@ -23,5 +23,6 @@ enum class ActiveSlidingSheet {
     LAYERS,
     TOOLS,
     COLOR,
-    EXPORT
+    EXPORT,
+    SETTINGS
 }

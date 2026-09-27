@@ -43,18 +43,28 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flip
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import com.example.data.sync.CloudSyncState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -113,6 +123,7 @@ import com.example.ui.theme.WhitePure
 import com.example.ui.viewmodel.DrawingViewModel
 import com.example.util.ExportFormat
 import java.io.File
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Modern, responsive sliding drawer system for Studio controls:
@@ -123,6 +134,16 @@ import java.io.File
 fun SlidingStudioDrawer(
     activeSheet: ActiveSlidingSheet,
     viewModel: DrawingViewModel,
+    projectTitle: String = "",
+    canvasWidth: Int = 1080,
+    canvasHeight: Int = 1920,
+    syncState: CloudSyncState = CloudSyncState.IDLE,
+    showQuickSliders: Boolean = false,
+    showAnimationTimeline: Boolean = false,
+    frameCount: Int = 1,
+    onToggleQuickSliders: () -> Unit = {},
+    onToggleAnimationTimeline: () -> Unit = {},
+    onOpenGallery: () -> Unit = {},
     onOpenManhwaStudio: () -> Unit = {},
     onImportImage: () -> Unit = {},
     onDismiss: () -> Unit,
@@ -199,6 +220,22 @@ fun SlidingStudioDrawer(
                             ActiveSlidingSheet.TOOLS -> SlidingToolsAndGuidesContent(viewModel, onOpenManhwaStudio, onImportImage)
                             ActiveSlidingSheet.COLOR -> SlidingColorPaletteContent(viewModel)
                             ActiveSlidingSheet.EXPORT -> SlidingExportContent(viewModel, onDismiss)
+                            ActiveSlidingSheet.SETTINGS -> SlidingSettingsContent(
+                                viewModel = viewModel,
+                                projectTitle = projectTitle,
+                                canvasWidth = canvasWidth,
+                                canvasHeight = canvasHeight,
+                                syncState = syncState,
+                                showQuickSliders = showQuickSliders,
+                                showAnimationTimeline = showAnimationTimeline,
+                                frameCount = frameCount,
+                                onToggleQuickSliders = onToggleQuickSliders,
+                                onToggleAnimationTimeline = onToggleAnimationTimeline,
+                                onOpenGallery = onOpenGallery,
+                                onOpenManhwaStudio = onOpenManhwaStudio,
+                                onImportImage = onImportImage,
+                                onDismiss = onDismiss
+                            )
                             ActiveSlidingSheet.NONE -> {}
                         }
                     }
@@ -219,6 +256,7 @@ private fun SlidingSheetHeader(
         ActiveSlidingSheet.TOOLS -> Triple("أدوات واستوديو الرسم", "الشبكة الإرشادية، التناظر، وقلب اللوحة", Icons.Default.GridOn)
         ActiveSlidingSheet.COLOR -> Triple("لوحة الألوان والباليتات", "تحديد الألوان، مجموعات جاهزة، وتاريخ الاستخدام", Icons.Default.Palette)
         ActiveSlidingSheet.EXPORT -> Triple("تصدير ومشاركة العمل الفني", "حفظ بصيغ PNG، JPG، وفيديو MP4 عالي الجودة", Icons.Default.Share)
+        ActiveSlidingSheet.SETTINGS -> Triple("إعدادات الاستوديو والطبقات", "إدارة الطبقات، الأدوات، المزامنة، وتصدير العمل", Icons.Default.Tune)
         ActiveSlidingSheet.NONE -> Triple("", "", Icons.Default.Brush)
     }
 
@@ -280,7 +318,7 @@ private fun SlidingSheetHeader(
 // -------------------------------------------------------------
 @Composable
 fun SlidingBrushesContent(viewModel: DrawingViewModel) {
-    val brushConfig = viewModel.brushConfig.value
+    val brushConfig by viewModel.brushConfig.collectAsStateWithLifecycle()
     var selectedCategory by remember { mutableStateOf(brushConfig.type.category) }
 
     val categoryBrushes = remember(selectedCategory) {
@@ -558,8 +596,15 @@ fun SlidingLayersContent(
     viewModel: DrawingViewModel,
     onImportImage: () -> Unit = {}
 ) {
-    val layers = viewModel.getCurrentFrameLayers().asReversed()
-    val activeLayerId = viewModel.activeLayerId.value
+    val currentProject by viewModel.currentProject.collectAsStateWithLifecycle()
+    val currentFrameIndex by viewModel.currentFrameIndex.collectAsStateWithLifecycle()
+    val activeLayerId by viewModel.activeLayerId.collectAsStateWithLifecycle()
+
+    val currentFrameLayers = remember(currentProject, currentFrameIndex) {
+        val idx = currentFrameIndex.coerceIn(0, (currentProject.frames.size - 1).coerceAtLeast(0))
+        if (currentProject.frames.isNotEmpty()) currentProject.frames[idx].layers else emptyList()
+    }
+    val layers = remember(currentFrameLayers) { currentFrameLayers.asReversed() }
 
     val blendModes = listOf("عادي", "مضاعفة", "شاشة", "تراكب", "إضافة", "إضاءة")
 
@@ -732,50 +777,104 @@ fun SlidingLayersContent(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Row 4: Layer Actions (Duplicate, Merge down, Delete)
+                        // Row 4: Layer Actions (Move Up, Move Down, Duplicate, Merge down, Delete)
+                        val originalIndex = currentFrameLayers.indexOfFirst { it.id == layer.id }
+                        val canMoveUp = originalIndex in 0 until currentFrameLayers.size - 1
+                        val canMoveDown = originalIndex > 0
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Duplicate
-                            IconButton(
-                                onClick = { viewModel.duplicateLayer(layer.id) },
-                                modifier = Modifier.size(32.dp)
+                            // Move Up & Move Down reorder controls
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Duplicate",
-                                    tint = WhiteComfortable,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (canMoveUp) DarkSurfaceHighlight else DarkSurfaceElevated,
+                                    border = BorderStroke(1.dp, if (canMoveUp) GrayBorderComfortable else GrayBorderSubtle)
+                                ) {
+                                    IconButton(
+                                        onClick = { viewModel.moveLayerUp(layer.id) },
+                                        enabled = canMoveUp,
+                                        modifier = Modifier.size(32.dp).testTag("layer_move_up_${layer.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowUp,
+                                            contentDescription = "Move Layer Up",
+                                            tint = if (canMoveUp) WhitePure else WhiteMuted.copy(alpha = 0.3f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (canMoveDown) DarkSurfaceHighlight else DarkSurfaceElevated,
+                                    border = BorderStroke(1.dp, if (canMoveDown) GrayBorderComfortable else GrayBorderSubtle)
+                                ) {
+                                    IconButton(
+                                        onClick = { viewModel.moveLayerDown(layer.id) },
+                                        enabled = canMoveDown,
+                                        modifier = Modifier.size(32.dp).testTag("layer_move_down_${layer.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "Move Layer Down",
+                                            tint = if (canMoveDown) WhitePure else WhiteMuted.copy(alpha = 0.3f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
                             }
 
-                            // Merge Down
-                            IconButton(
-                                onClick = { viewModel.mergeLayerDown(layer.id) },
-                                modifier = Modifier.size(32.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.CallMerge,
-                                    contentDescription = "Merge Down",
-                                    tint = WhiteComfortable,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-
-                            // Delete
-                            if (layers.size > 1) {
+                                // Duplicate
                                 IconButton(
-                                    onClick = { viewModel.deleteLayer(layer.id) },
-                                    modifier = Modifier.size(32.dp)
+                                    onClick = { viewModel.duplicateLayer(layer.id) },
+                                    modifier = Modifier.size(32.dp).testTag("layer_duplicate_${layer.id}")
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete",
-                                        tint = Color(0xFFE57373),
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Duplicate",
+                                        tint = WhiteComfortable,
                                         modifier = Modifier.size(16.dp)
                                     )
+                                }
+
+                                // Merge Down
+                                IconButton(
+                                    onClick = { viewModel.mergeLayerDown(layer.id) },
+                                    enabled = originalIndex > 0,
+                                    modifier = Modifier.size(32.dp).testTag("layer_merge_${layer.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CallMerge,
+                                        contentDescription = "Merge Down",
+                                        tint = if (originalIndex > 0) WhiteComfortable else WhiteMuted.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                // Delete
+                                if (layers.size > 1) {
+                                    IconButton(
+                                        onClick = { viewModel.deleteLayer(layer.id) },
+                                        modifier = Modifier.size(32.dp).testTag("layer_delete_${layer.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color(0xFFE57373),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -795,12 +894,12 @@ fun SlidingToolsAndGuidesContent(
     onOpenManhwaStudio: () -> Unit = {},
     onImportImage: () -> Unit = {}
 ) {
-    val showGrid = viewModel.showGrid.value
-    val gridSize = viewModel.gridSize.value
-    val symmetryMode = viewModel.symmetryMode.value
-    val canvasPaper = viewModel.canvasPaper.value
-    val flipH = viewModel.flipHorizontal.value
-    val flipV = viewModel.flipVertical.value
+    val showGrid by viewModel.showGrid.collectAsStateWithLifecycle()
+    val gridSize by viewModel.gridSize.collectAsStateWithLifecycle()
+    val symmetryMode by viewModel.symmetryMode.collectAsStateWithLifecycle()
+    val canvasPaper by viewModel.canvasPaper.collectAsStateWithLifecycle()
+    val flipH by viewModel.flipHorizontal.collectAsStateWithLifecycle()
+    val flipV by viewModel.flipVertical.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -872,7 +971,7 @@ fun SlidingToolsAndGuidesContent(
                             shape = RoundedCornerShape(6.dp),
                             color = AccentGreen.copy(alpha = 0.2f)
                         ) {
-                            Text(text = "v1.3.2", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            Text(text = "v1.3.3", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
                     Text(
@@ -1107,8 +1206,8 @@ fun SlidingToolsAndGuidesContent(
 // -------------------------------------------------------------
 @Composable
 fun SlidingColorPaletteContent(viewModel: DrawingViewModel) {
-    val brushConfig = viewModel.brushConfig.value
-    val recentColors = viewModel.recentColors.value
+    val brushConfig by viewModel.brushConfig.collectAsStateWithLifecycle()
+    val recentColors by viewModel.recentColors.collectAsStateWithLifecycle()
 
     var red by remember(brushConfig.color) { mutableFloatStateOf(brushConfig.color.red) }
     var green by remember(brushConfig.color) { mutableFloatStateOf(brushConfig.color.green) }
@@ -1316,8 +1415,10 @@ fun SlidingExportContent(
     viewModel: DrawingViewModel,
     onDismiss: () -> Unit
 ) {
-    val exportProgress = viewModel.exportProgress.value
-    val lastExportedFile = viewModel.lastExportedFile.value
+    val exportProgress by viewModel.exportProgress.collectAsStateWithLifecycle()
+    val lastExportedFile by viewModel.lastExportedFile.collectAsStateWithLifecycle()
+    val currentProgress = exportProgress
+    val currentExportedFile = lastExportedFile
 
     val formats = listOf(
         Triple(ExportFormat.PNG, "PNG فائق الدقة", "صورة عالية الوضوح تدعم الشفافية"),
@@ -1330,7 +1431,7 @@ fun SlidingExportContent(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (exportProgress != null) {
+        if (currentProgress != null) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1341,18 +1442,18 @@ fun SlidingExportContent(
                     Text(text = "جارٍ تصدير العمل الفني...", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = { exportProgress },
+                        progress = { currentProgress },
                         modifier = Modifier.fillMaxWidth(),
                         color = AccentGreen,
                         trackColor = DarkBg
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = "${(exportProgress * 100).toInt()}%", color = AccentGreen, fontSize = 11.sp)
+                    Text(text = "${(currentProgress * 100).toInt()}%", color = AccentGreen, fontSize = 11.sp)
                 }
             }
         }
 
-        if (lastExportedFile != null && exportProgress == null) {
+        if (currentExportedFile != null && currentProgress == null) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1368,13 +1469,13 @@ fun SlidingExportContent(
                 ) {
                     Column {
                         Text(text = "تم تجهيز الملف بنجاح! ✓", color = AccentGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text(text = lastExportedFile.name, color = WhiteMuted, fontSize = 11.sp, maxLines = 1)
+                        Text(text = currentExportedFile.name, color = WhiteMuted, fontSize = 11.sp, maxLines = 1)
                     }
 
                     Button(
                         onClick = {
-                            val mime = if (lastExportedFile.name.endsWith(".mp4")) "video/mp4" else "image/png"
-                            viewModel.shareExportedFile(lastExportedFile, mime)
+                            val mime = if (currentExportedFile.name.endsWith(".mp4")) "video/mp4" else "image/png"
+                            viewModel.shareExportedFile(currentExportedFile, mime)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = WhitePure, contentColor = Color.Black),
                         shape = RoundedCornerShape(12.dp)
@@ -1418,6 +1519,638 @@ fun SlidingExportContent(
                         tint = WhitePure,
                         modifier = Modifier.size(18.dp)
                     )
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// 6. Sliding Studio Settings Content (Drop-Up Menu with 4 Tabs)
+// -------------------------------------------------------------
+@Composable
+fun SlidingSettingsContent(
+    viewModel: DrawingViewModel,
+    projectTitle: String,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    syncState: CloudSyncState,
+    showQuickSliders: Boolean,
+    showAnimationTimeline: Boolean,
+    frameCount: Int,
+    onToggleQuickSliders: () -> Unit,
+    onToggleAnimationTimeline: () -> Unit,
+    onOpenGallery: () -> Unit,
+    onOpenManhwaStudio: () -> Unit,
+    onImportImage: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+    val currentProject by viewModel.currentProject.collectAsStateWithLifecycle()
+    val currentFrameIndex by viewModel.currentFrameIndex.collectAsStateWithLifecycle()
+    val layersCount = remember(currentProject, currentFrameIndex) {
+        val idx = currentFrameIndex.coerceIn(0, (currentProject.frames.size - 1).coerceAtLeast(0))
+        if (currentProject.frames.isNotEmpty()) currentProject.frames[idx].layers.size else 0
+    }
+
+    val tabs = listOf(
+        Triple("الطبقات ($layersCount)", Icons.Default.Layers, "layers"),
+        Triple("أدوات واستوديو", Icons.Default.Tune, "tools"),
+        Triple("المشروع والمزامنة", Icons.Default.Folder, "project"),
+        Triple("تصدير ومشاركة", Icons.Default.Share, "export")
+    )
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Tab selector bar
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(tabs) { index, (title, icon, tag) ->
+                val isSelected = selectedTab == index
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSelected) WhitePure else DarkSurfaceElevated,
+                    border = BorderStroke(1.dp, if (isSelected) WhitePure else GrayBorderSubtle),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { selectedTab = index }
+                        .testTag("settings_tab_$tag")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isSelected) Color(0xFF101014) else WhiteComfortable,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = title,
+                            color = if (isSelected) Color(0xFF101014) else WhiteComfortable,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Dynamic Tab Content
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            when (selectedTab) {
+                0 -> SlidingLayersContent(viewModel = viewModel, onImportImage = onImportImage)
+                1 -> SlidingStudioToolsTab(
+                    viewModel = viewModel,
+                    showQuickSliders = showQuickSliders,
+                    showAnimationTimeline = showAnimationTimeline,
+                    frameCount = frameCount,
+                    onToggleQuickSliders = onToggleQuickSliders,
+                    onToggleAnimationTimeline = onToggleAnimationTimeline
+                )
+                2 -> SlidingProjectAndSyncTab(
+                    projectTitle = projectTitle,
+                    canvasWidth = canvasWidth,
+                    canvasHeight = canvasHeight,
+                    syncState = syncState,
+                    onTriggerSync = { viewModel.syncManager.triggerSync(viewModel.currentProject.value) },
+                    onOpenGallery = {
+                        onDismiss()
+                        onOpenGallery()
+                    },
+                    onOpenManhwaStudio = {
+                        onDismiss()
+                        onOpenManhwaStudio()
+                    },
+                    onImportImage = onImportImage
+                )
+                3 -> SlidingExportContent(viewModel = viewModel, onDismiss = onDismiss)
+            }
+        }
+    }
+}
+
+@Composable
+fun SlidingStudioToolsTab(
+    viewModel: DrawingViewModel,
+    showQuickSliders: Boolean,
+    showAnimationTimeline: Boolean,
+    frameCount: Int,
+    onToggleQuickSliders: () -> Unit,
+    onToggleAnimationTimeline: () -> Unit
+) {
+    val showGrid by viewModel.showGrid.collectAsStateWithLifecycle()
+    val gridSize by viewModel.gridSize.collectAsStateWithLifecycle()
+    val symmetryMode by viewModel.symmetryMode.collectAsStateWithLifecycle()
+    val canvasPaper by viewModel.canvasPaper.collectAsStateWithLifecycle()
+    val flipH by viewModel.flipHorizontal.collectAsStateWithLifecycle()
+    val flipV by viewModel.flipVertical.collectAsStateWithLifecycle()
+    val brushConfig by viewModel.brushConfig.collectAsStateWithLifecycle()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Quick Sliders Toggle Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "شريط التعديل السريع للفرشاة", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "إظهار شريط جانبي عائم لضبط الحجم والكثافة فوراً", color = WhiteMuted, fontSize = 11.sp)
+                    }
+                    Switch(
+                        checked = showQuickSliders,
+                        onCheckedChange = { onToggleQuickSliders() },
+                        colors = SwitchDefaults.colors(checkedThumbColor = WhitePure, checkedTrackColor = AccentGreen)
+                    )
+                }
+            }
+        }
+
+        // Animation Timeline Toggle Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "شريط الحركة والأنيميشن ($frameCount إطار)", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "لوحة صناعة وتحريك الرسوم والتبديل بين الإطارات", color = WhiteMuted, fontSize = 11.sp)
+                    }
+                    Switch(
+                        checked = showAnimationTimeline,
+                        onCheckedChange = { onToggleAnimationTimeline() },
+                        colors = SwitchDefaults.colors(checkedThumbColor = WhitePure, checkedTrackColor = AccentGreen)
+                    )
+                }
+            }
+        }
+
+        // Grid Guides Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(text = "الشبكة الإرشادية (Grid Guides)", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "خطوط شبكية لدقة التخطيط والأبعاد", color = WhiteMuted, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = showGrid,
+                            onCheckedChange = { viewModel.toggleGrid() },
+                            colors = SwitchDefaults.colors(checkedThumbColor = WhitePure, checkedTrackColor = AccentGreen)
+                        )
+                    }
+
+                    if (showGrid) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "حجم الشبكة: ${gridSize.toInt()}px", color = WhiteComfortable, fontSize = 11.sp, modifier = Modifier.width(110.dp))
+                            Slider(
+                                value = gridSize,
+                                onValueChange = { viewModel.setGridSize(it) },
+                                valueRange = 15f..120f,
+                                colors = SliderDefaults.colors(thumbColor = WhitePure, activeTrackColor = WhitePure),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Symmetry Mode Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "أداة التناظر والمرآة الذكية", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(text = symmetryMode.titleAr, color = AccentGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        SymmetryMode.values().forEach { mode ->
+                            val isSelected = mode == symmetryMode
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) WhitePure else DarkBg)
+                                    .border(1.dp, if (isSelected) WhitePure else GrayBorderSubtle, RoundedCornerShape(10.dp))
+                                    .clickable { viewModel.setSymmetryMode(mode) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = mode.iconLabel,
+                                        color = if (isSelected) Color(0xFF101014) else WhitePure,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = mode.titleAr,
+                                        color = if (isSelected) Color(0xFF101014) else WhiteMuted,
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Canvas Flip Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(text = "قلب زاوية الرؤية (Flip Canvas)", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "معاينة الرسم من زوايا منعكسة لاكتشاف وتصحيح العيوب", color = WhiteMuted, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.toggleFlipHorizontal() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (flipH) WhitePure else DarkSurfaceHighlight,
+                                contentColor = if (flipH) Color(0xFF101014) else WhitePure
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(text = "⇋ قلب أفقي", fontSize = 12.sp, fontWeight = if (flipH) FontWeight.Bold else FontWeight.Normal)
+                        }
+                        Button(
+                            onClick = { viewModel.toggleFlipVertical() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (flipV) WhitePure else DarkSurfaceHighlight,
+                                contentColor = if (flipV) Color(0xFF101014) else WhitePure
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(text = "⇅ قلب عمودي", fontSize = 12.sp, fontWeight = if (flipV) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Canvas Paper Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(text = "خلفية ونوع الورق", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        CanvasPaper.values().forEach { paper ->
+                            val isSelected = paper == canvasPaper
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(paper.color)
+                                    .border(2.dp, if (isSelected) AccentGreen else Color.Transparent, RoundedCornerShape(10.dp))
+                                    .clickable { viewModel.setCanvasPaper(paper) }
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = paper.titleAr.split(" ").last(),
+                                    color = if (paper.isDark) WhitePure else Color.Black,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Zero-Latency Engine & Smoothing
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(text = "وضع الاستجابة الفائقة (Zero Latency)", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "رسم مباشر بأعلى معدل تحديث 120Hz مع محرك Spline", color = WhiteMuted, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = brushConfig.zeroLatency,
+                            onCheckedChange = { viewModel.toggleZeroLatency() },
+                            colors = SwitchDefaults.colors(checkedThumbColor = WhitePure, checkedTrackColor = AccentGreen)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "تنعيم الخطوط: ${(brushConfig.smoothing * 100).toInt()}%", color = WhiteComfortable, fontSize = 11.sp, modifier = Modifier.width(110.dp))
+                        Slider(
+                            value = brushConfig.smoothing,
+                            onValueChange = { viewModel.setBrushSmoothing(it) },
+                            valueRange = 0f..1.0f,
+                            colors = SliderDefaults.colors(thumbColor = AccentGreen, activeTrackColor = AccentGreen),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SlidingProjectAndSyncTab(
+    projectTitle: String,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    syncState: CloudSyncState,
+    onTriggerSync: () -> Unit,
+    onOpenGallery: () -> Unit,
+    onOpenManhwaStudio: () -> Unit,
+    onImportImage: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Project Details Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = "بيانات اللوحة الحالية", color = WhiteMuted, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = projectTitle, color = WhitePure, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "الأبعاد: ${canvasWidth} × ${canvasHeight} بكسل • دقة كاملة",
+                        color = AccentGreen,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        // Cloud Sync Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = when (syncState) {
+                                    CloudSyncState.SYNCED -> Icons.Default.CloudDone
+                                    CloudSyncState.SYNCING -> Icons.Default.CloudSync
+                                    else -> Icons.Default.CloudSync
+                                },
+                                contentDescription = null,
+                                tint = if (syncState == CloudSyncState.SYNCED) AccentGreen else WhitePure,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when (syncState) {
+                                    CloudSyncState.SYNCED -> "محفوظ ومزامن سحابياً"
+                                    CloudSyncState.SYNCING -> "جارٍ المزامنة السحابية..."
+                                    else -> "محفوظ محلياً (غير متصل)"
+                                },
+                                color = WhitePure,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Button(
+                            onClick = onTriggerSync,
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceHighlight),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(text = "مزامنة الآن", color = WhitePure, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Navigation Card: Open Gallery
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp))
+                    .clickable { onOpenGallery() },
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1E2029)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.Folder, contentDescription = null, tint = Color(0xFFFFD56B), modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(text = "معرض اللوحات والمشاريع", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "استعراض وفتح وتبديل المشاريع المحفوظة", color = WhiteMuted, fontSize = 11.sp)
+                        }
+                    }
+                    Text(text = "فتح ➜", color = AccentGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Navigation Card: Manhwa Studio Hub
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, AccentGreen.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                    .clickable { onOpenManhwaStudio() },
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AccentGreen.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.ContentCut, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(text = "أستوديو المانهوا وقص الصور الطويلة", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "قص وتجميع وتعديل مباشر على فصول المانهوا", color = WhiteMuted, fontSize = 11.sp)
+                        }
+                    }
+                    Text(text = "انتقال ➜", color = AccentGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Action Card: Direct Photo Import
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, GrayBorderComfortable, RoundedCornerShape(16.dp))
+                    .clickable { onImportImage() },
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF263238)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, tint = WhitePure, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(text = "استيراد صورة مباشرة من الهاتف", color = WhitePure, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "إدراج أي صورة كطبقة عمل قابلة للتعديل والشفافية", color = WhiteMuted, fontSize = 11.sp)
+                        }
+                    }
+                    Text(text = "اختيار ➜", color = WhitePure, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
